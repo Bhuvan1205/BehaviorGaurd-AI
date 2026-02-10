@@ -1,0 +1,41 @@
+# Core Data Science Libraries
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+
+# Data Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.14.0
+
+# Jupyter Notebook Support
+jupyter>=1.0.0
+notebook>=7.0.0
+ipykernel>=6.25.0
+
+# API Development (if needed for deployment)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+
+# Data Processing & Utilities
+python-dateutil>=2.8.2
+pytz>=2023.3
+
+# File I/O
+openpyxl>=3.1.0  # For Excel file support
+xlrd>=2.0.1      # For reading older Excel files
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Code Quality
+black>=23.7.0
+flake8>=6.1.0
+pylint>=2.17.0
+
+# Environment Management
+python-dotenv>=1.0.0

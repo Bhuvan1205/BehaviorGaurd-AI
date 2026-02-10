@@ -1,0 +1,31 @@
+{
+  "model_type": "IsolationForest",
+  "version": "v2_baseline",
+  "hyperparameters": {
+    "n_estimators": 200,
+    "contamination": 0.01,
+    "max_samples": 5000,
+    "random_state": 42
+  },
+  "features": [
+    "logon_count",
+    "logoff_count",
+    "unique_pcs",
+    "hour",
+    "z_logon",
+    "z_pcs",
+    "night_flag"
+  ],
+  "training_date": "2026-02-09",
+  "dataset": {
+    "total_samples": 3366264,
+    "anomaly_count": 33630,
+    "anomaly_rate": 0.009996
+  },
+  "performance": {
+    "correlation_with_behavior_score": -0.749747,
+    "min_behavior_score": 0.449359,
+    "max_behavior_score": 9.859316
+  },
+  "notes": "Conservative 1% contamination chosen to minimize false positives. Strong correlation with rule-based behavior_score validates approach."
+}
