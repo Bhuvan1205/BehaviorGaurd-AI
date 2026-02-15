@@ -1,0 +1,21 @@
+{
+  "clustering_features": [
+    "mean_logon_count",
+    "std_logon_count",
+    "total_logon_volume",
+    "mean_unique_pcs",
+    "std_unique_pcs",
+    "mean_activity_hour",
+    "activity_hour_std"
+  ],
+  "isolation_forest_features": [
+    "logon_count",
+    "logoff_count",
+    "unique_pcs",
+    "z_logon",
+    "z_pcs"
+  ],
+  "version": "v3",
+  "n_estimators": 100,
+  "contamination": "auto"
+}
