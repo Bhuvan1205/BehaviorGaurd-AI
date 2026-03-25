@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 
 const links = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { name: 'Risk Analyzer', path: '/analyzer', icon: Activity },
+  { name: 'Risk Analyzer', path: '/risk-analyzer', icon: Activity },
   { name: 'Monitoring', path: '/monitoring', icon: Users },
   { name: 'Alerts', path: '/alerts', icon: AlertTriangle },
   { name: 'Reports', path: '/reports', icon: FileText },
