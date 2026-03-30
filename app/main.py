@@ -1,11 +1,34 @@
 from fastapi import FastAPI
-from app.api.routes import router
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="BehaviorGuard-AI")
+from app.api.db import get_cursor
+from app.api.routes import ensure_admin_tables, router
 
-# Include routes
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router)
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+
+@app.on_event("startup")
+def startup():
+    conn, cur = get_cursor()
+    try:
+        ensure_admin_tables(cur)
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.get("/")
+def root():
+    return {"message": "BehaviorGuard-AI backend running"}

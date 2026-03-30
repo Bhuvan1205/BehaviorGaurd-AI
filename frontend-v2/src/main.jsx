@@ -1,0 +1,32 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { Toaster } from "sonner";
+import App from "./App";
+import "./styles/globals.css";
+import { useAuthStore } from "./store/useAuthStore";
+import { initializeTheme, useTheme } from "./theme/theme";
+
+useAuthStore.getState().restoreSession();
+initializeTheme();
+
+function Root() {
+  const { theme } = useTheme();
+
+  return (
+    <React.StrictMode>
+      <App />
+      <Toaster
+        position="top-right"
+        theme={theme}
+        richColors
+        toastOptions={{
+          className: "border border-white/10 bg-slate-950 text-slate-100",
+        }}
+      />
+    </React.StrictMode>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <Root />
+);
