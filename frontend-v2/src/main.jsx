@@ -3,10 +3,9 @@ import ReactDOM from "react-dom/client";
 import { Toaster } from "sonner";
 import App from "./App";
 import "./styles/globals.css";
-import { useAuthStore } from "./store/useAuthStore";
 import { initializeTheme, useTheme } from "./theme/theme";
 
-useAuthStore.getState().restoreSession();
+// Theme init — session is already loaded from localStorage by the Zustand store
 initializeTheme();
 
 function Root() {

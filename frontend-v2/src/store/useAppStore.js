@@ -6,6 +6,8 @@ export const useAppStore = create((set, get) => ({
   selectedUserId: "",
   isLoadingUsers: false,
   usersError: "",
+  _refreshInterval: null,
+
   async loadUsers() {
     if (get().isLoadingUsers) {
       return;
@@ -32,7 +34,28 @@ export const useAppStore = create((set, get) => ({
       });
     }
   },
+
   selectUser(userId) {
     set({ selectedUserId: userId });
+  },
+
+  // Auto-refresh users every `intervalMs` milliseconds (default 15s).
+  // Call once from AppLayout; it will keep data fresh across all pages.
+  startAutoRefresh(intervalMs = 15000) {
+    const existing = get()._refreshInterval;
+    if (existing) clearInterval(existing);
+
+    // Load immediately, then on the interval
+    get().loadUsers();
+    const id = setInterval(() => get().loadUsers(), intervalMs);
+    set({ _refreshInterval: id });
+  },
+
+  stopAutoRefresh() {
+    const existing = get()._refreshInterval;
+    if (existing) {
+      clearInterval(existing);
+      set({ _refreshInterval: null });
+    }
   },
 }));

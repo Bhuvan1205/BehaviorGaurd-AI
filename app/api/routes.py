@@ -987,8 +987,11 @@ async def stream_live(token: Optional[str] = Query(default=None)):
 
 @router.get("/stream/status")
 def stream_status():
-    """Returns the current state of the replay engine and SSE bus."""
-    return stream_engine.get_status()
+    """Returns the current state of the SSE bus and autonomous replay engine."""
+    from app.services.auto_replay import auto_replay_engine
+    status = stream_engine.get_status()
+    status.update(auto_replay_engine.get_status())
+    return status
 
 
 @router.post("/stream/scenario")

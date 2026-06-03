@@ -299,7 +299,7 @@ export function MonitoringPage() {
           </div>
         ) : (
           <div className="flex h-[22rem] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] text-sm text-slate-500">
-            {isLoading ? "Loading…" : "No data yet. Select a user and start live_replay.py."}
+            {isLoading ? "Loading…" : "No data yet for this user. Events are being generated automatically."}
           </div>
         )}
       </section>
@@ -315,7 +315,7 @@ export function MonitoringPage() {
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
               {selectedUserId
                 ? streamConnected
-                  ? "No events yet — start live_replay.py"
+                  ? "No events for this user yet — events are being auto-generated"
                   : "Stream idle — select a user"
                 : "Select a user to monitor"}
             </div>

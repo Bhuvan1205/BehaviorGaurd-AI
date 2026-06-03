@@ -116,6 +116,8 @@ export function DashboardPage() {
 
   useEffect(() => {
     loadDashboard();
+    const id = setInterval(loadDashboard, 30000); // refresh every 30s
+    return () => clearInterval(id);
   }, []);
 
   const orgRiskData = summary?.risk_distribution ?? [];

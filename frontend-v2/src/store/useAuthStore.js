@@ -20,6 +20,14 @@ export const useAuthStore = create((set) => ({
       return;
     }
 
+    // If Zustand already has a valid session object (e.g. from the
+    // localStorage initialiser on line 12-13), skip the network
+    // round-trip — avoids wiping the session on HMR / fast navigation.
+    const currentState = useAuthStore.getState();
+    if (currentState.session?.token === session.token && currentState.admin) {
+      return;
+    }
+
     set({ isLoading: true, error: "" });
     try {
       const admin = await getCurrentAdmin();

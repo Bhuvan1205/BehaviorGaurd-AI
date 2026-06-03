@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
+  Bot,
   Radio,
   Shield,
   ShieldAlert,
@@ -11,9 +12,8 @@ import {
   WifiOff,
   Zap,
 } from "lucide-react";
-import { openLiveStream, getStreamStatus, setStreamScenario } from "../services/api";
-import { useAuthStore } from "../store/useAuthStore";
-import { toast } from "sonner";
+import { getStreamStatus } from "../services/api";
+import { useLiveStore } from "../store/useLiveStore";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -51,132 +51,36 @@ function fmtRisk(v) {
   return `${Math.round(Number(v || 0) * 100)}%`;
 }
 
-const SCENARIOS = [
-  { id: "normal", label: "Normal Day", icon: "🟢", desc: "Baseline — no anomalies" },
-  { id: "burst_alert", label: "Burst Attack", icon: "🔴", desc: "Sudden ×15 login spike" },
-  { id: "night_intrusion", label: "Night Intrusion", icon: "🌙", desc: "Privileged access at 02:00" },
-  { id: "device_spread", label: "Device Spread", icon: "💻", desc: "Credentials on 6 devices" },
-];
-
 const MAX_EVENTS = 80;
-const BURST_THRESHOLD = 3;   // 3 high-risk events in 60s triggers burst badge
+const BURST_THRESHOLD = 3;
 const BURST_WINDOW_MS = 60_000;
+
+const SCENARIO_META = {
+  normal:           { label: "Normal Day",      icon: "🟢", color: "text-emerald-400", border: "border-emerald-400/30 bg-emerald-400/10" },
+  burst_alert:      { label: "Burst Attack",     icon: "🔴", color: "text-rose-400",    border: "border-rose-500/30 bg-rose-500/10" },
+  night_intrusion:  { label: "Night Intrusion",  icon: "🌙", color: "text-indigo-400",  border: "border-indigo-400/30 bg-indigo-400/10" },
+  device_spread:    { label: "Device Spread",    icon: "💻", color: "text-amber-400",   border: "border-amber-400/30 bg-amber-400/10" },
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function LiveFeedPage() {
-  const session = useAuthStore((s) => s.session);
+  // ── Read from global live store (persists across navigation) ────────────
+  const events       = useLiveStore((s) => s.events);
+  const connected    = useLiveStore((s) => s.connected);
+  const connectionError = useLiveStore((s) => s.connectionError);
+  const eventsCount  = useLiveStore((s) => s.eventsCount);
+  const burstAlert   = useLiveStore((s) => s.burstAlert);
+  const scoreboard   = useLiveStore((s) => s.scoreboard);
 
-  const [events, setEvents] = useState([]);
-  const [connected, setConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState("");
-  const [eventsCount, setEventsCount] = useState(0);
   const [streamStatus, setStreamStatus] = useState(null);
-  const [activeScenario, setActiveScenario] = useState("normal");
-  const [isSettingScenario, setIsSettingScenario] = useState(false);
   const [filterRiskOnly, setFilterRiskOnly] = useState(false);
-  const [burstAlert, setBurstAlert] = useState(false);
 
-  const streamRef = useRef(null);
   const tickerRef = useRef(null);
-  const recentHighRisk = useRef([]);
-  const burstTimerRef = useRef(null);
-
-  // Scoreboard: track max risk per user seen in this session
-  const [scoreboard, setScoreboard] = useState({});
-
-  // ── SSE connection ──────────────────────────────────────────────────────
-
-  const connect = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.close();
-    }
-    setConnectionError("");
-
-    const stream = openLiveStream(
-      (evt) => {
-        if (evt.type === "connected") {
-          setConnected(true);
-          return;
-        }
-
-        const enriched = {
-          ...evt,
-          _id: `${evt.user_id}_${evt.timestamp}_${Math.random()}`,
-          _received: Date.now(),
-        };
-
-        setEvents((prev) => [enriched, ...prev].slice(0, MAX_EVENTS));
-        setEventsCount((c) => c + 1);
-
-        // Scoreboard update
-        setScoreboard((prev) => {
-          const existing = prev[evt.user_id];
-          if (!existing || evt.risk_score > existing.risk_score) {
-            return {
-              ...prev,
-              [evt.user_id]: {
-                user_id: evt.user_id,
-                full_name: evt.full_name,
-                employee_id: evt.employee_id,
-                department: evt.department,
-                risk_score: evt.risk_score,
-                risk_level: evt.risk_level,
-                anomaly_flag: evt.anomaly_flag,
-                last_seen: evt.timestamp,
-              },
-            };
-          }
-          return prev;
-        });
-
-        // Burst detection
-        if (evt.anomaly_flag) {
-          const now = Date.now();
-          recentHighRisk.current = recentHighRisk.current
-            .filter((t) => now - t < BURST_WINDOW_MS)
-            .concat(now);
-
-          if (recentHighRisk.current.length >= BURST_THRESHOLD) {
-            setBurstAlert(true);
-            toast.error("Threat burst detected!", {
-              description: `${recentHighRisk.current.length} anomalies in the last 60 seconds`,
-            });
-            clearTimeout(burstTimerRef.current);
-            burstTimerRef.current = setTimeout(() => setBurstAlert(false), 10_000);
-          }
-        }
-
-        if (evt.alert_created) {
-          toast.error(`Alert raised for ${evt.full_name}`, {
-            description: `Risk: ${fmtRisk(evt.risk_score)} · ${evt.department}`,
-          });
-        }
-      },
-      () => {
-        setConnected(false);
-        setConnectionError("Stream disconnected. Reconnecting...");
-        setTimeout(connect, 3000);
-      },
-    );
-
-    streamRef.current = stream;
-    setConnected(false); // Will flip to true on first message
-  }, []);
-
-  useEffect(() => {
-    connect();
-    return () => {
-      streamRef.current?.close();
-      clearTimeout(burstTimerRef.current);
-    };
-  }, [connect]);
 
   // Auto-scroll ticker
   useEffect(() => {
-    if (tickerRef.current) {
-      tickerRef.current.scrollTop = 0;
-    }
+    if (tickerRef.current) tickerRef.current.scrollTop = 0;
   }, [events]);
 
   // Stream status polling (every 5s)
@@ -192,21 +96,6 @@ export function LiveFeedPage() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Scenario control ────────────────────────────────────────────────────
-
-  const handleScenario = async (id) => {
-    setIsSettingScenario(true);
-    try {
-      await setStreamScenario(id);
-      setActiveScenario(id);
-      toast.success(`Scenario set: ${SCENARIOS.find((s) => s.id === id)?.label}`);
-    } catch {
-      toast.error("Failed to set scenario");
-    } finally {
-      setIsSettingScenario(false);
-    }
-  };
-
   // ── Derived data ────────────────────────────────────────────────────────
 
   const displayEvents = filterRiskOnly
@@ -218,6 +107,7 @@ export function LiveFeedPage() {
     .slice(0, 10);
 
   const anomalyCount = events.filter((e) => e.anomaly_flag).length;
+
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -286,50 +176,85 @@ export function LiveFeedPage() {
         )}
       </section>
 
-      {/* ── Scenario Picker ── */}
+      {/* ── Auto-Mode Status Panel ── */}
       <section className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/20">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-white">Demo Scenario</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Set the anomaly pattern that <code className="text-cyan-400">live_replay.py</code> will inject.
-              Start the replay engine in a terminal, then switch scenarios to see live alerts fire.
-            </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-2.5 text-cyan-300">
+              <Bot size={20} />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-white">Auto-Mode Active</h2>
+              <p className="mt-0.5 text-sm text-slate-400">
+                The backend is automatically rotating through all threat scenarios.
+                No manual input required.
+              </p>
+            </div>
           </div>
+
           {streamStatus && (
-            <div className="text-right text-xs text-slate-500">
-              <div>{streamStatus.connected_clients} client{streamStatus.connected_clients !== 1 ? "s" : ""} connected</div>
-              <div>{streamStatus.events_published} events published</div>
+            <div className="flex flex-wrap gap-3">
+              {/* Current scenario badge */}
+              {(() => {
+                const meta = SCENARIO_META[streamStatus.current_scenario] ?? SCENARIO_META.normal;
+                return (
+                  <div className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold ${meta.border} ${meta.color}`}>
+                    <span>{meta.icon}</span>
+                    {meta.label}
+                  </div>
+                );
+              })()}
+
+              {/* Phase progress */}
+              <div className="inline-flex flex-col justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-400">
+                <span className="mb-1 font-medium text-slate-300">
+                  Phase: {streamStatus.phase_events_remaining ?? "—"} events left
+                </span>
+                <div className="h-1 w-32 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-cyan-400 transition-all duration-500"
+                    style={{
+                      width: streamStatus.phase_duration
+                        ? `${Math.round(
+                            ((streamStatus.phase_duration - (streamStatus.phase_events_remaining ?? 0)) /
+                              streamStatus.phase_duration) *
+                              100
+                          )}%`
+                        : "0%",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="inline-flex flex-col justify-center gap-0.5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-400">
+                <span>{streamStatus.connected_clients} client{streamStatus.connected_clients !== 1 ? "s" : ""} connected</span>
+                <span>{streamStatus.events_published} events published</span>
+              </div>
             </div>
           )}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {SCENARIOS.map((sc) => (
-            <button
-              key={sc.id}
-              onClick={() => handleScenario(sc.id)}
-              disabled={isSettingScenario}
-              className={`rounded-2xl border p-4 text-left transition-all hover:scale-[1.02] disabled:pointer-events-none disabled:opacity-60 ${
-                activeScenario === sc.id
-                  ? "border-cyan-400/40 bg-cyan-400/10"
-                  : "border-white/10 bg-white/[0.03] hover:border-white/20"
+
+        {/* Scenario legend */}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {Object.entries(SCENARIO_META).map(([id, meta]) => (
+            <div
+              key={id}
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
+                streamStatus?.current_scenario === id
+                  ? meta.border
+                  : "border-white/5 bg-white/[0.02] opacity-50"
               }`}
             >
-              <div className="mb-2 text-xl">{sc.icon}</div>
-              <div className="font-semibold text-white text-sm">{sc.label}</div>
-              <div className="mt-1 text-xs text-slate-400">{sc.desc}</div>
-            </button>
+              <span>{meta.icon}</span>
+              <span className={streamStatus?.current_scenario === id ? meta.color : "text-slate-400"}>
+                {meta.label}
+              </span>
+              {streamStatus?.current_scenario === id && (
+                <span className="ml-auto flex h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+              )}
+            </div>
           ))}
-        </div>
-
-        {/* How to run */}
-        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Start the replay engine in a terminal:
-          </p>
-          <code className="block text-sm text-cyan-300">
-            python live_replay.py --speed 60 --scenario {activeScenario}
-          </code>
         </div>
       </section>
 
@@ -385,9 +310,9 @@ export function LiveFeedPage() {
             ) : (
               <div className="space-y-1.5">
                 <AnimatePresence initial={false}>
-                  {displayEvents.map((evt) => (
+                  {displayEvents.map((evt, idx) => (
                     <motion.div
-                      key={evt._id}
+                      key={`${evt.user_id}_${evt.timestamp}_${idx}`}
                       initial={{ opacity: 0, y: -8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2 }}

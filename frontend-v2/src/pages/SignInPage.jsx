@@ -82,20 +82,7 @@ export function SignInPage() {
             <p className="mt-6 max-w-2xl text-base leading-8 text-slate-400">
               Sign in to access organization-wide monitoring, alert triage, user-level investigation, and simulation workflows backed directly by PostgreSQL.
             </p>
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Users</p>
-                <p className="mt-3 text-2xl font-semibold text-white">60</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Alerts</p>
-                <p className="mt-3 text-2xl font-semibold text-white">23</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Windows</p>
-                <p className="mt-3 text-2xl font-semibold text-white">1203</p>
-              </div>
-            </div>
+
           </section>
 
           <section className="rounded-[2.5rem] border border-white/10 bg-slate-950/80 p-8 shadow-2xl shadow-black/30 backdrop-blur sm:p-10">
