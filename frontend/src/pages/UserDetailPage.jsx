@@ -6,6 +6,8 @@ import {
   ShieldUser,
   TriangleAlert,
   UserRound,
+  CheckCircle,
+  Loader2,
 } from "lucide-react";
 import {
   Area,
@@ -19,7 +21,7 @@ import {
   YAxis,
 } from "recharts";
 import { useParams } from "react-router-dom";
-import { getAlerts, getHistory, getUserDetail } from "../services/api";
+import { getAlerts, getHistory, getUserDetail, getUserEmailAnalyses, getUserEmailAnalysisEmails } from "../services/api";
 import { useAppStore } from "../store/useAppStore";
 
 function formatRisk(value) {
@@ -92,6 +94,10 @@ export function UserDetailPage() {
   const [history, setHistory] = useState([]);
   const [weeklyTrends, setWeeklyTrends] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [emailAnalyses, setEmailAnalyses] = useState([]);
+  const [selectedAnalysis, setSelectedAnalysis] = useState(null);
+  const [selectedAnalysisEmails, setSelectedAnalysisEmails] = useState([]);
+  const [isEmailsLoading, setIsEmailsLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -101,6 +107,8 @@ export function UserDetailPage() {
       setHistory([]);
       setWeeklyTrends([]);
       setAlerts([]);
+      setEmailAnalyses([]);
+      setSelectedAnalysis(null);
       setIsLoading(false);
       return;
     }
@@ -113,10 +121,11 @@ export function UserDetailPage() {
       setError("");
 
       try {
-        const [userData, historyData, alertsData] = await Promise.all([
+        const [userData, historyData, alertsData, emailAnalysesData] = await Promise.all([
           getUserDetail(effectiveUserId),
           getHistory(effectiveUserId),
           getAlerts(effectiveUserId),
+          getUserEmailAnalyses(effectiveUserId),
         ]);
 
         if (!isMounted) {
@@ -127,6 +136,14 @@ export function UserDetailPage() {
         setHistory(Array.isArray(historyData?.windows) ? historyData.windows : []);
         setWeeklyTrends(Array.isArray(historyData?.weekly_trends) ? historyData.weekly_trends : []);
         setAlerts(Array.isArray(alertsData) ? alertsData : []);
+        
+        const analyses = Array.isArray(emailAnalysesData) ? emailAnalysesData : [];
+        setEmailAnalyses(analyses);
+        if (analyses.length > 0) {
+          setSelectedAnalysis(analyses[0]);
+        } else {
+          setSelectedAnalysis(null);
+        }
       } catch (requestError) {
         if (isMounted) {
           setError(requestError.message || "Unable to load user detail.");
@@ -134,6 +151,8 @@ export function UserDetailPage() {
           setHistory([]);
           setWeeklyTrends([]);
           setAlerts([]);
+          setEmailAnalyses([]);
+          setSelectedAnalysis(null);
         }
       } finally {
         if (isMounted) {
@@ -148,6 +167,37 @@ export function UserDetailPage() {
       isMounted = false;
     };
   }, [effectiveUserId, selectUser]);
+
+  // Effect to load emails when selected RAG analysis batch changes
+  useEffect(() => {
+    if (!effectiveUserId || !selectedAnalysis?.batch_date) {
+      setSelectedAnalysisEmails([]);
+      return;
+    }
+
+    let isMounted = true;
+    const loadFlaggedEmails = async () => {
+      setIsEmailsLoading(true);
+      try {
+        const emails = await getUserEmailAnalysisEmails(effectiveUserId, selectedAnalysis.batch_date);
+        if (isMounted) {
+          setSelectedAnalysisEmails(emails);
+        }
+      } catch (err) {
+        console.error("Error loading RAG emails:", err);
+      } finally {
+        if (isMounted) {
+          setIsEmailsLoading(false);
+        }
+      }
+    };
+
+    loadFlaggedEmails();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveUserId, selectedAnalysis?.batch_date]);
 
   const anomalyTrendData = useMemo(
     () =>
@@ -268,6 +318,142 @@ export function UserDetailPage() {
           <p className="mt-3 text-2xl font-semibold text-white">{user.history_count}</p>
           <p className="mt-4 text-sm text-slate-500">{user.anomaly_count} anomaly windows</p>
         </div>
+      </section>
+
+      {/* Email Security Audit (RAG) section */}
+      <section className="rounded-[1.9rem] border border-white/10 bg-slate-950/70 p-6 shadow-xl shadow-black/20">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Email Security Audit (RAG)</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              RAG-based security policy analysis run on top 5% anomalous users.
+            </p>
+          </div>
+          {emailAnalyses.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-400">Select Batch:</span>
+              <select
+                value={selectedAnalysis?.batch_date || ""}
+                onChange={(e) => {
+                  const found = emailAnalyses.find((a) => a.batch_date === e.target.value);
+                  if (found) setSelectedAnalysis(found);
+                }}
+                className="rounded-xl border border-white/10 bg-slate-900/80 p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+              >
+                {emailAnalyses.map((a) => (
+                  <option key={a.batch_date} value={a.batch_date}>
+                    {a.batch_date}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {emailAnalyses.length === 0 ? (
+          <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] text-sm text-slate-500">
+            No email security audit records found for this user.
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Verdict and Explanation */}
+            <div className="grid gap-6 md:grid-cols-[1fr_2.5fr]">
+              {/* Verdict Card */}
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 flex flex-col items-center justify-center text-center">
+                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  RAG Verdict
+                </span>
+                <span className={`mt-3 rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-[0.16em] ${
+                  selectedAnalysis?.verdict === "Flagged"
+                    ? "border-rose-500/20 bg-rose-500/10 text-rose-400"
+                    : selectedAnalysis?.verdict === "Human Review Required"
+                    ? "border-amber-500/20 bg-amber-500/10 text-amber-400"
+                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                }`}>
+                  {selectedAnalysis?.verdict}
+                </span>
+                <span className="mt-4 text-xs text-slate-500">
+                  Audited: {formatTimestamp(selectedAnalysis?.created_at)}
+                </span>
+              </div>
+
+              {/* Explanation Card */}
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  AI Security Assessment
+                </span>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {selectedAnalysis?.explanation}
+                </p>
+                {selectedAnalysis?.policy_sections_used && selectedAnalysis.policy_sections_used.length > 0 && (
+                  <div className="pt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-slate-500 mr-1">Policy Referenced:</span>
+                    {selectedAnalysis.policy_sections_used.map((sec) => (
+                      <span key={sec} className="rounded-lg bg-white/[0.05] px-2.5 py-1 text-xs text-slate-400 border border-white/5">
+                        {sec}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Flagged Emails Table */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-white">Flagged Emails in Anomalous Windows</h3>
+              {isEmailsLoading ? (
+                <div className="py-8 text-center text-slate-500 text-sm">
+                  Loading flagged emails...
+                </div>
+              ) : selectedAnalysisEmails.length === 0 ? (
+                <div className="rounded-2xl border border-white/5 bg-white/[0.01] p-6 text-center text-sm text-slate-500">
+                  No flagged emails associated with this audit run.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/40">
+                  <table className="w-full text-left text-sm text-slate-300">
+                    <thead className="bg-white/[0.03] text-xs uppercase tracking-[0.1em] text-slate-400">
+                      <tr>
+                        <th className="p-4">Date/Time</th>
+                        <th className="p-4">Recipient</th>
+                        <th className="p-4">Subject</th>
+                        <th className="p-4">Attachments</th>
+                        <th className="p-4">Risk Level</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {selectedAnalysisEmails.map((email) => (
+                        <tr key={email.id} className="hover:bg-white/[0.01] transition-colors">
+                          <td className="p-4 whitespace-nowrap text-slate-400">
+                            {formatTimestamp(email.email_date)}
+                          </td>
+                          <td className="p-4 text-cyan-400 font-medium">
+                            {email.recipient_to}
+                          </td>
+                          <td className="p-4 font-semibold text-white">
+                            {email.subject}
+                          </td>
+                          <td className="p-4 text-slate-400">
+                            {email.attachment_count} files
+                          </td>
+                          <td className="p-4">
+                            <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${
+                              email.external_recipient 
+                                ? "bg-rose-950/50 text-rose-300 border border-rose-500/20" 
+                                : "bg-slate-900 text-slate-300"
+                            }`}>
+                              {email.external_recipient ? "External Exfil Risk" : "Internal Policy Check"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">

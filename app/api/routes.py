@@ -968,3 +968,358 @@ def pipeline_status(
         )
 
     return job
+
+
+# ---------------------------------------------------------------------------
+# EMAIL ANALYSIS & LOG UPLOAD ROUTES
+# ---------------------------------------------------------------------------
+
+@router.post("/pipeline/upload-emails")
+async def upload_emails(
+    file: UploadFile = File(..., description="CSV/Excel email logs file"),
+    authorization: Optional[str] = Header(default=None),
+):
+    import pandas as pd
+    import re
+    from psycopg2.extras import execute_values
+
+    # Auth
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+    # Validate file extension
+    filename = file.filename or "upload.csv"
+    ext = os.path.splitext(filename.lower())[1]
+    if ext not in [".csv", ".xlsx", ".xls"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file must be a .csv, .xlsx, or .xls"
+        )
+
+    # Read file
+    try:
+        if ext in [".xlsx", ".xls"]:
+            df = pd.read_excel(file.file)
+        else:
+            df = pd.read_csv(file.file)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    required_cols = {"id", "employee_id", "email_date", "recipient_to", "subject", "content", "created_at"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email logs file missing required columns: {missing}"
+        )
+
+    # Convert dates and parse timestamps
+    df["email_date"] = pd.to_datetime(df["email_date"], errors="coerce")
+    df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+    df = df.dropna(subset=["email_date"]).copy()
+
+    if df.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="No rows with valid email dates in uploaded file."
+        )
+
+    min_date = df["email_date"].min()
+    max_date = df["email_date"].max()
+
+    def parse_recipients(to_str, cc_str, bcc_str):
+        emails = []
+        for val in [to_str, cc_str, bcc_str]:
+            if pd.notna(val) and str(val).strip():
+                for part in re.split(r'[;,]', str(val)):
+                    email = part.strip()
+                    if email:
+                        emails.append(email)
+        return emails
+
+    conn, cur = get_cursor()
+    try:
+        # Load user mappings from core.users
+        cur.execute("SELECT user_id, employee_id FROM core.users")
+        user_mapping = {row["employee_id"]: str(row["user_id"]) for row in cur.fetchall()}
+
+        # Delete existing records in this range to ensure idempotency
+        cur.execute(
+            "DELETE FROM events.email_events WHERE event_timestamp BETWEEN %s AND %s",
+            (min_date, max_date)
+        )
+        deleted_count = cur.rowcount
+
+        # Prepare records for insertion
+        records = []
+        skipped_unmapped = 0
+
+        for idx, row in df.iterrows():
+            emp_id = row["employee_id"]
+            if emp_id not in user_mapping:
+                skipped_unmapped += 1
+                continue
+
+            user_id = user_mapping[emp_id]
+            
+            # Recipient parsing
+            recipients = parse_recipients(
+                row.get("recipient_to"),
+                row.get("recipient_cc"),
+                row.get("recipient_bcc")
+            )
+            recipient_count = len(recipients)
+            
+            # Determine if external recipient
+            external_recipient = any(not email.lower().endswith("@dtaa.com") for email in recipients)
+            
+            # Attachment count
+            att_count = row.get("attachment_count")
+            attachment_count = int(att_count) if pd.notna(att_count) else 0
+
+            # Subject and Content validation
+            subject = str(row.get("subject", ""))
+            content = str(row.get("content", ""))
+            pc = str(row.get("pc", ""))
+            sender_email = str(row.get("sender_email", ""))
+            recipient_to = str(row.get("recipient_to", ""))
+            activity = str(row.get("activity", "SEND"))
+            
+            size_val = row.get("size_bytes")
+            size_bytes = int(size_val) if pd.notna(size_val) else 0
+
+            records.append((
+                str(row["id"]),
+                user_id,
+                emp_id,
+                row["email_date"],
+                row["email_date"],  # event_timestamp = email_date
+                pc,
+                sender_email,
+                recipient_to,
+                recipient_count,
+                external_recipient,
+                activity,
+                subject,
+                size_bytes,
+                attachment_count,
+                content,
+                row["created_at"]
+            ))
+
+        execute_values(
+            cur,
+            """
+            INSERT INTO events.email_events (
+                id, user_id, employee_id, email_date, event_timestamp,
+                pc, sender_email, recipient_to, recipient_count, external_recipient,
+                activity, subject, size_bytes, attachment_count, content, created_at
+            )
+            VALUES %s
+            """,
+            records,
+            page_size=2000
+        )
+        conn.commit()
+        return {
+            "success": True,
+            "ingested_rows": len(records),
+            "deleted_rows": deleted_count,
+            "skipped_unmapped": skipped_unmapped,
+            "min_date": min_date.isoformat(),
+            "max_date": max_date.isoformat()
+        }
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        cur.close()
+        conn.close()
+
+
+@router.get("/users/{user_id}/email-analyses")
+def get_user_email_analyses(
+    user_id: str,
+    authorization: Optional[str] = Header(default=None)
+):
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+        cur.execute(
+            """
+            SELECT analysis_id, user_id, batch_date::text, verdict, explanation, policy_sections_used, created_at::text AS created_at
+            FROM security.email_analysis_results
+            WHERE user_id = %s::uuid
+            ORDER BY batch_date DESC
+            """,
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+
+@router.get("/users/{user_id}/email-analyses/{batch_date}/emails")
+def get_user_email_analysis_emails(
+    user_id: str,
+    batch_date: str,
+    authorization: Optional[str] = Header(default=None)
+):
+    import pandas as pd
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+        
+        # Fetch user emails during anomalous hours for this user and batch_date
+        cur.execute(
+            """
+            SELECT e.id, e.user_id, e.employee_id, e.email_date::text AS email_date, e.pc, 
+                   e.sender_email, e.recipient_to, e.recipient_count, 
+                   e.external_recipient, e.activity, e.subject, 
+                   e.size_bytes, e.attachment_count, e.content, e.created_at::text AS created_at
+            FROM events.email_events e
+            JOIN security.risk_scores r 
+              ON r.user_id = e.user_id 
+             AND e.email_date >= r.window_start 
+             AND e.email_date < r.window_start + INTERVAL '1 hour'
+            WHERE r.user_id = %s::uuid 
+              AND r.batch_date = %s
+              AND r.anomaly_flag = TRUE
+            ORDER BY e.email_date ASC
+            """,
+            (user_id, batch_date)
+        )
+        rows = cur.fetchall()
+        df_emails = pd.DataFrame(rows)
+        
+        if df_emails.empty:
+            return []
+            
+        # Filter for interesting emails (email_risk_score >= 3)
+        from app.services.email_pipeline import filter_interesting_emails
+        df_interesting, _ = filter_interesting_emails(df_emails)
+        
+        if df_interesting.empty:
+            return []
+            
+        return df_interesting.to_dict("records")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+
+@router.get("/email-analyses")
+def get_all_email_analyses(
+    batch_date: Optional[str] = Query(default=None),
+    verdict: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None)
+):
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+        
+        query = """
+            SELECT r.analysis_id, r.user_id, r.batch_date::text AS batch_date, r.verdict, r.explanation, r.policy_sections_used, r.created_at::text AS created_at,
+                   u.full_name, u.employee_id, d.department_name, rl.role_name
+            FROM security.email_analysis_results r
+            JOIN core.users u ON u.user_id = r.user_id
+            LEFT JOIN core.departments d ON d.department_id = u.department_id
+            LEFT JOIN core.roles rl ON rl.role_id = u.role_id
+            WHERE 1=1
+        """
+        params = []
+        if batch_date:
+            query += " AND r.batch_date = %s"
+            params.append(batch_date)
+        if verdict:
+            query += " AND r.verdict = %s"
+            params.append(verdict)
+            
+        query += " ORDER BY r.batch_date DESC, r.created_at DESC"
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+
+@router.get("/email-analyses/batches")
+def get_email_analyses_batches(
+    authorization: Optional[str] = Header(default=None)
+):
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+        cur.execute(
+            """
+            SELECT DISTINCT batch_date::text AS batch_date 
+            FROM security.email_analysis_results 
+            ORDER BY batch_date DESC
+            """
+        )
+        return [r["batch_date"] for r in cur.fetchall()]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+
+@router.get("/email-analyses/policy")
+def get_email_policy_doc(
+    authorization: Optional[str] = Header(default=None)
+):
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+        
+        policy_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "data", "dtaa_security_privacy_policy.md"
+        )
+        if not os.path.exists(policy_path):
+            raise HTTPException(status_code=404, detail="Policy file not found")
+            
+        with open(policy_path, "r", encoding="utf-8") as f:
+            policy_content = f.read()
+            
+        return {"policy": policy_content}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()

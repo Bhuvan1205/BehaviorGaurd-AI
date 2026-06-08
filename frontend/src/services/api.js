@@ -180,3 +180,43 @@ export function openLiveStream(onEvent, onError) {
     close: () => source.close(),
   };
 }
+
+export async function uploadEmails(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  const response = await apiClient.post("/pipeline/upload-emails", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return unwrapResponse(response);
+}
+
+export async function getUserEmailAnalyses(userId) {
+  const response = await apiClient.get(`/users/${userId}/email-analyses`);
+  return unwrapResponse(response);
+}
+
+export async function getUserEmailAnalysisEmails(userId, batchDate) {
+  const response = await apiClient.get(`/users/${userId}/email-analyses/${batchDate}/emails`);
+  return unwrapResponse(response);
+}
+
+export async function getAllEmailAnalyses(batchDate = null, verdict = null) {
+  const params = {};
+  if (batchDate) params.batch_date = batchDate;
+  if (verdict) params.verdict = verdict;
+  const response = await apiClient.get("/email-analyses", { params });
+  return unwrapResponse(response);
+}
+
+export async function getEmailAnalysisBatches() {
+  const response = await apiClient.get("/email-analyses/batches");
+  return unwrapResponse(response);
+}
+
+export async function getEmailPolicy() {
+  const response = await apiClient.get("/email-analyses/policy");
+  return unwrapResponse(response);
+}

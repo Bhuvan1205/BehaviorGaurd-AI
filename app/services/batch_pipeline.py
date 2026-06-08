@@ -252,6 +252,15 @@ def run_batch_pipeline(log_file_path: str, batch_date: str) -> dict:
         # Commit transaction
         conn.commit()
 
+        # Step 6: Run RAG-based email pipeline on top 5% anomalous users
+        email_summary = {}
+        try:
+            from app.services.email_pipeline import run_email_pipeline_for_batch
+            email_summary = run_email_pipeline_for_batch(batch_date, df_scored)
+            logger.info("Email pipeline executed: %s", email_summary)
+        except Exception as e:
+            logger.error("Failed to run email RAG pipeline in batch: %s", e)
+
         elapsed = round(time.perf_counter() - t_start, 2)
         summary = {
             "batch_date":               batch_date,
@@ -261,6 +270,8 @@ def run_batch_pipeline(log_file_path: str, batch_date: str) -> dict:
             "alerts_generated":         alerts_generated,
             "noise_points":             int(df_scored["is_noise"].sum()),
             "processing_time_seconds":  elapsed,
+            "email_audits_status":      email_summary.get("status", "failed"),
+            "email_audited_count":      email_summary.get("analyzed_users_count", 0),
         }
         logger.info("=" * 70)
         logger.info("Weekly Pipeline complete: %s", summary)

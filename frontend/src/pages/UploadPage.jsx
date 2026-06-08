@@ -10,12 +10,15 @@ import {
   Play
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { uploadLog, getJobStatus } from "../services/api";
+import { uploadLog, getJobStatus, uploadEmails } from "../services/api";
 
 export function UploadPage() {
   const [file, setFile] = useState(null);
+  const [emailFile, setEmailFile] = useState(null);
   const [batchDate, setBatchDate] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isEmailUploading, setIsEmailUploading] = useState(false);
+  const [emailUploadSuccess, setEmailUploadSuccess] = useState("");
   const [jobId, setJobId] = useState("");
   const [jobStatus, setJobStatus] = useState(null);
   const [error, setError] = useState("");
@@ -82,7 +85,7 @@ export function UploadPage() {
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!file) {
-      setError("Please select a file to upload.");
+      setError("Please select a behavior logs file to upload.");
       return;
     }
     if (!batchDate) {
@@ -94,24 +97,39 @@ export function UploadPage() {
     setError("");
     setJobStatus(null);
     setJobId("");
+    setEmailUploadSuccess("");
 
     try {
+      // 1. If email file is selected, upload it first
+      if (emailFile) {
+        setIsEmailUploading(true);
+        const emailRes = await uploadEmails(emailFile);
+        setIsEmailUploading(false);
+        setEmailUploadSuccess(
+          `Successfully ingested ${emailRes.ingested_rows} email events.`
+        );
+      }
+
+      // 2. Upload behavior logs and queue ML job
       const res = await uploadLog(file, batchDate);
       setJobId(res.job_id);
       setJobStatus({ status: "queued", message: "Job successfully queued" });
     } catch (err) {
-      setError(err.message || "Log upload failed. Please try again.");
+      setError(err.message || "Ingestion job failed. Please try again.");
     } finally {
       setIsUploading(false);
+      setIsEmailUploading(false);
     }
   };
 
   const handleReset = () => {
     setFile(null);
+    setEmailFile(null);
     setBatchDate("");
     setJobId("");
     setJobStatus(null);
     setError("");
+    setEmailUploadSuccess("");
   };
 
   return (
@@ -208,9 +226,64 @@ export function UploadPage() {
               )}
             </div>
 
+            {/* Email Logs File Selector */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-300">Email Logs Dataset (CSV or Excel) (Optional)</label>
+              
+              {!emailFile ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-slate-900/20 hover:border-white/20 hover:bg-slate-900/30 p-6 transition-colors">
+                  <p className="text-sm text-slate-300">
+                    <label className="cursor-pointer text-cyan-400 hover:underline">
+                      Select Email CSV File
+                      <input 
+                        type="file" 
+                        accept=".csv,.xlsx,.xls"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            setEmailFile(e.target.files[0]);
+                          }
+                        }}
+                        disabled={isUploading || !!jobId}
+                        className="hidden" 
+                      />
+                    </label>
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">Supports CSV, XLSX, and XLS formats</p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2.5 text-cyan-300">
+                      <FileSpreadsheet size={20} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">{emailFile.name}</p>
+                      <p className="text-xs text-slate-500">{(emailFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  </div>
+                  {!jobId && (
+                    <button 
+                      type="button"
+                      onClick={() => setEmailFile(null)}
+                      className="text-xs text-slate-400 hover:text-rose-400 transition"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {emailUploadSuccess && (
+              <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200 flex items-start gap-2.5">
+                <CheckCircle size={16} className="shrink-0 mt-0.5 text-emerald-400" />
+                <span>{emailUploadSuccess}</span>
+              </div>
+            )}
+
             {error && (
               <div className="rounded-xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200 flex items-start gap-2.5">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-rose-400" />
                 <span>{error}</span>
               </div>
             )}
@@ -358,6 +431,15 @@ export function UploadPage() {
                               {Number(jobStatus.summary.alerts_generated || 0).toLocaleString()}
                             </p>
                           </div>
+                          
+                          {jobStatus.summary.email_audits_status === "complete" && (
+                            <div className="col-span-2 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3 text-center">
+                              <p className="text-cyan-400 font-medium text-xs font-semibold uppercase tracking-wider">Policy RAG Audits Completed</p>
+                              <p className="text-sm font-bold text-white mt-1">
+                                {Number(jobStatus.summary.email_audited_count || 0)} employees audited
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
 

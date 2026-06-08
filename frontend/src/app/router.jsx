@@ -6,6 +6,7 @@ import { DashboardPage } from "../pages/DashboardPage";
 import { UploadPage } from "../pages/UploadPage";
 import { SignInPage } from "../pages/SignInPage";
 import { UserDetailPage } from "../pages/UserDetailPage";
+import { EmailSecurityDashboard } from "../pages/EmailSecurityDashboard";
 import { ProtectedRoute } from "../components/ProtectedRoute";
 
 export function AppRouter() {
@@ -19,6 +20,7 @@ export function AppRouter() {
             <Route path="/about" element={<AboutPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/upload" element={<UploadPage />} />
+            <Route path="/email-security" element={<EmailSecurityDashboard />} />
             <Route path="/user-analytics" element={<UserDetailPage />} />
             <Route path="/user/:id" element={<UserDetailPage />} />
           </Route>

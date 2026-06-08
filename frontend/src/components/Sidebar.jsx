@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   CloudUpload,
   ShieldUser,
+  ShieldAlert,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAppStore } from "../store/useAppStore";
@@ -35,6 +36,13 @@ export function Sidebar() {
       icon: AlertTriangle,
       tone: "nav-alerts",
       iconTone: "nav-icon-alerts",
+    },
+    {
+      label: "Email Security",
+      to: "/email-security",
+      icon: ShieldAlert,
+      tone: "nav-monitoring",
+      iconTone: "nav-icon-monitoring",
     },
     {
       label: "User Analytics",
