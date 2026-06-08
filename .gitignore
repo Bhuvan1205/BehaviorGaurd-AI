@@ -34,3 +34,7 @@ notebooks/Email_pipeline.ipynb
 
 # Models and assignments
 notebooks/models/
+
+# Local Environment Secret Configs
+.env
+.env.*
