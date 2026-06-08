@@ -14,8 +14,12 @@ Source: notebooks/V6.ipynb — execution_count 61 (serialisation cell).
 import json
 import os
 import threading
+import warnings
 
 import joblib
+from sklearn.exceptions import InconsistentVersionWarning
+
+warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
 
 _lock = threading.Lock()

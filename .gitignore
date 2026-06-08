@@ -23,3 +23,14 @@ tempCodeRunnerFile.python
 notebooks/if_tuning_results.csv
 notebooks/artifacts/*.csv
 data/processed/user_profiles_v0.csv
+
+# Heavy datasets and logs
+data/email_dataset_from_logs_2026_06_12.csv
+data/daily_logs/
+temp/
+
+# Exclude email pipeline notebook for now
+notebooks/Email_pipeline.ipynb
+
+# Models and assignments
+notebooks/models/

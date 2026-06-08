@@ -1,22 +1,23 @@
-import asyncio
-import json
 import logging
-import traceback
 import hashlib
+import os
 import secrets
+import shutil
+import threading
 import uuid
-from datetime import datetime
-from typing import Optional, AsyncGenerator
+from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.api.db import get_cursor
-from app.config import ANOMALY_FLAG_THRESHOLD, RISK_THRESHOLD
-from app.services.feature_engine import compute_features
-from app.services.model_service import anomaly_score_to_risk, predict
-from app.services.stream_engine import stream_engine
+from app.config import RISK_THRESHOLD
+
+# ── In-process job store (survives for the lifetime of the server process) ────
+# Structure: { job_id: { status, batch_date, file_path, summary, error, started_at, finished_at } }
+_jobs: dict[str, dict] = {}
+_jobs_lock = threading.Lock()
 
 
 router = APIRouter()
@@ -38,20 +39,7 @@ def resolve_risk_level(risk_value: float) -> str:
 
 
 
-class IngestEvent(BaseModel):
-    """Raw log event for real-time stream ingestion — mirrors what a
-    Windows Event Log collector or SIEM would forward."""
-    user_id: str
-    timestamp: str
-    logons: int = 1
-    devices: int = 1
-    ip_address: str = "10.0.0.1"
-    device_name: str = ""
-    source: str = "stream"  # e.g. 'windows_event', 'siem', 'replay'
 
-
-class ScenarioRequest(BaseModel):
-    scenario: str  # 'normal' | 'burst_alert' | 'night_intrusion' | 'device_spread'
 
 
 class LoginRequest(BaseModel):
@@ -145,45 +133,13 @@ def get_current_admin(cur, authorization: Optional[str]):
     return row
 
 
-def parse_event_timestamp(timestamp: str) -> datetime:
-    normalized = timestamp.strip()
-    if normalized.endswith("Z"):
-        normalized = normalized[:-1] + "+00:00"
-    return datetime.fromisoformat(normalized)
 
-
-def ensure_monthly_partitions(cur, timestamp: str) -> None:
-    event_dt = parse_event_timestamp(timestamp)
-    month_start = event_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    next_month = (
-        month_start.replace(year=month_start.year + 1, month=1)
-        if month_start.month == 12
-        else month_start.replace(month=month_start.month + 1)
-    )
-    suffix = month_start.strftime("%Y_%m")
-    start_literal = month_start.strftime("%Y-%m-%d")
-    end_literal = next_month.strftime("%Y-%m-%d")
-
-    cur.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS features.user_behavior_features_{suffix}
-        PARTITION OF features.user_behavior_features
-        FOR VALUES FROM ('{start_literal}') TO ('{end_literal}')
-        """
-    )
-    cur.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS security.risk_scores_{suffix}
-        PARTITION OF security.risk_scores_new
-        FOR VALUES FROM ('{start_literal}') TO ('{end_literal}')
-        """
-    )
 
 
 def fetch_latest_open_alert(cur, user_id: str):
     cur.execute(
         """
-        SELECT alert_id, user_id, risk_score_id, severity, status, created_at
+        SELECT alert_id, user_id, batch_date, anomaly_count, window_days, severity, status, created_at, NULL AS risk_score_id
         FROM security.alerts
         WHERE user_id = %s AND status = 'OPEN'
         ORDER BY created_at DESC
@@ -345,9 +301,9 @@ def get_users(authorization: Optional[str] = Header(default=None)):
                     r.user_id,
                     r.risk_score AS latest_risk,
                     r.risk_level AS latest_risk_level,
-                    r.event_timestamp AS latest_event_timestamp
-                FROM security.risk_scores_new r
-                ORDER BY r.user_id, r.event_timestamp DESC
+                    r.window_start AS latest_event_timestamp
+                FROM security.risk_scores r
+                ORDER BY r.user_id, r.window_start DESC
             ),
             risk_stats AS (
                 SELECT
@@ -355,7 +311,7 @@ def get_users(authorization: Optional[str] = Header(default=None)):
                     AVG(r.risk_score) AS avg_risk,
                     COUNT(*) AS history_count,
                     SUM(CASE WHEN r.anomaly_flag THEN 1 ELSE 0 END) AS anomaly_count
-                FROM security.risk_scores_new r
+                FROM security.risk_scores r
                 GROUP BY r.user_id
             ),
             alert_stats AS (
@@ -419,10 +375,21 @@ def get_user_detail(user_id: str, authorization: Optional[str] = Header(default=
                     r.user_id,
                     r.risk_score AS latest_risk,
                     r.risk_level AS latest_risk_level,
-                    r.event_timestamp AS latest_event_timestamp
-                FROM security.risk_scores_new r
+                    r.window_start AS latest_event_timestamp
+                FROM security.risk_scores r
                 WHERE r.user_id = %s
-                ORDER BY r.user_id, r.event_timestamp DESC
+                ORDER BY r.user_id, r.window_start DESC
+            ),
+            latest_batch_stats AS (
+                SELECT
+                    r.user_id,
+                    COALESCE((SUM(CASE WHEN r.anomaly_flag = TRUE THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0)::float) * 100, 0) AS latest_anomaly_rate,
+                    COALESCE(SUM(CASE WHEN r.anomaly_flag = TRUE THEN 1 ELSE 0 END), 0) AS latest_anomaly_count,
+                    COALESCE(COUNT(*), 0) AS latest_total_windows
+                FROM security.risk_scores r
+                WHERE r.user_id = %s
+                  AND r.batch_date = (SELECT MAX(batch_date) FROM security.risk_scores WHERE user_id = %s)
+                GROUP BY r.user_id
             ),
             risk_stats AS (
                 SELECT
@@ -430,7 +397,7 @@ def get_user_detail(user_id: str, authorization: Optional[str] = Header(default=
                     AVG(r.risk_score) AS avg_risk,
                     COUNT(*) AS history_count,
                     SUM(CASE WHEN r.anomaly_flag THEN 1 ELSE 0 END) AS anomaly_count
-                FROM security.risk_scores_new r
+                FROM security.risk_scores r
                 WHERE r.user_id = %s
                 GROUP BY r.user_id
             ),
@@ -459,17 +426,21 @@ def get_user_detail(user_id: str, authorization: Optional[str] = Header(default=
                 COALESCE(rs.history_count, 0) AS history_count,
                 COALESCE(rs.anomaly_count, 0) AS anomaly_count,
                 COALESCE(al.alert_count, 0) AS alert_count,
-                COALESCE(al.open_alert_count, 0) AS open_alert_count
+                COALESCE(al.open_alert_count, 0) AS open_alert_count,
+                COALESCE(lbs.latest_anomaly_rate, 0) AS latest_anomaly_rate,
+                COALESCE(lbs.latest_anomaly_count, 0) AS latest_anomaly_count,
+                COALESCE(lbs.latest_total_windows, 0) AS latest_total_windows
             FROM core.users u
             LEFT JOIN core.departments d ON d.department_id = u.department_id
             LEFT JOIN core.roles rl ON rl.role_id = u.role_id
             LEFT JOIN latest_risk lr ON lr.user_id = u.user_id
+            LEFT JOIN latest_batch_stats lbs ON lbs.user_id = u.user_id
             LEFT JOIN risk_stats rs ON rs.user_id = u.user_id
             LEFT JOIN alert_stats al ON al.user_id = u.user_id
             WHERE u.user_id = %s
             LIMIT 1
             """,
-            (user_id, user_id, user_id, user_id),
+            (user_id, user_id, user_id, user_id, user_id, user_id),
         )
         row = cur.fetchone()
         if not row:
@@ -498,11 +469,11 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
                     (SELECT COUNT(*) FROM core.users WHERE status = 'active') AS active_users,
                     (SELECT COUNT(*) FROM core.departments) AS departments,
                     (SELECT COUNT(*) FROM core.devices) AS devices,
-                    (SELECT COUNT(*) FROM events.login_events) AS login_events,
+                    (SELECT COALESCE(SUM(logon_count), 0) FROM features.user_behavior_features) AS login_events,
                     (SELECT COUNT(*) FROM security.alerts) AS alerts_total,
                     (SELECT COUNT(*) FROM security.alerts WHERE status = 'OPEN') AS alerts_open,
-                    (SELECT COALESCE(AVG(risk_score), 0) FROM security.risk_scores_new) AS avg_risk,
-                    (SELECT COUNT(*) FROM security.risk_scores_new WHERE risk_score >= %s) AS high_risk_windows
+                    (SELECT COALESCE(AVG(risk_score), 0) FROM security.risk_scores) AS avg_risk,
+                    (SELECT COUNT(*) FROM security.risk_scores WHERE risk_score >= %s) AS high_risk_windows
             ),
             risk_bands AS (
                 SELECT
@@ -513,7 +484,8 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
                         ELSE 'High'
                     END AS band,
                     COUNT(*) AS count
-                FROM security.risk_scores_new
+                FROM security.risk_scores
+                WHERE batch_date = (SELECT MAX(batch_date) FROM security.risk_scores)
                 GROUP BY 1
             ),
             user_risk AS (
@@ -523,12 +495,14 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
                     u.employee_id,
                     d.department_name,
                     rl.role_name,
-                    COALESCE(MAX(r.risk_score), 0) AS max_risk,
+                    COALESCE((SUM(CASE WHEN r.anomaly_flag = TRUE THEN 1 ELSE 0 END)::float / NULLIF(COUNT(r.window_start), 0)::float) * 100, 0) AS anomaly_ratio,
+                    COALESCE(SUM(CASE WHEN r.anomaly_flag = TRUE THEN 1 ELSE 0 END), 0) AS anomalous_windows,
+                    COALESCE(COUNT(r.window_start), 0) AS total_windows,
                     COALESCE(AVG(r.risk_score), 0) AS avg_risk
                 FROM core.users u
                 LEFT JOIN core.departments d ON d.department_id = u.department_id
                 LEFT JOIN core.roles rl ON rl.role_id = u.role_id
-                LEFT JOIN security.risk_scores_new r ON r.user_id = u.user_id
+                LEFT JOIN security.risk_scores r ON r.user_id = u.user_id AND r.batch_date = (SELECT MAX(batch_date) FROM security.risk_scores)
                 WHERE u.status = 'active'
                 GROUP BY u.user_id, u.full_name, u.employee_id, d.department_name, rl.role_name
             ),
@@ -547,7 +521,9 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
                     ur.employee_id,
                     ur.department_name,
                     ur.role_name,
-                    ur.max_risk,
+                    ur.anomaly_ratio,
+                    ur.anomalous_windows,
+                    ur.total_windows,
                     ur.avg_risk,
                     COALESCE(ua.alert_count, 0) AS alert_count,
                     COALESCE(ua.open_alert_count, 0) AS open_alert_count
@@ -561,11 +537,12 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
                     employee_id,
                     department_name,
                     role_name,
-                    max_risk,
-                    avg_risk,
+                    anomaly_ratio,
+                    anomalous_windows,
+                    total_windows,
                     open_alert_count
                 FROM user_rollup
-                ORDER BY open_alert_count DESC, max_risk DESC, avg_risk DESC, full_name
+                ORDER BY anomaly_ratio DESC, open_alert_count DESC, full_name
                 LIMIT 8
             ),
             recent_alerts AS (
@@ -586,19 +563,31 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
                 SELECT
                     department_name,
                     COUNT(*) AS user_count,
-                    COALESCE(AVG(avg_risk), 0) AS avg_risk,
+                    COALESCE(AVG(anomaly_ratio), 0) / 100.0 AS avg_risk,
                     COALESCE(SUM(open_alert_count), 0) AS open_alert_count
                 FROM user_rollup
                 GROUP BY department_name
                 ORDER BY avg_risk DESC, open_alert_count DESC, department_name
                 LIMIT 8
+            ),
+            weekly_trends AS (
+                SELECT
+                    batch_date::text AS batch_date,
+                    COUNT(*) AS total_windows,
+                    SUM(CASE WHEN anomaly_flag THEN 1 ELSE 0 END) AS anomaly_count,
+                    COALESCE((SUM(CASE WHEN anomaly_flag = TRUE THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0)::float) * 100, 0) AS anomaly_rate,
+                    COALESCE(AVG(risk_score), 0) AS avg_risk_score
+                FROM security.risk_scores
+                GROUP BY batch_date
+                ORDER BY batch_date ASC
             )
             SELECT json_build_object(
                 'totals', (SELECT row_to_json(org_metrics) FROM org_metrics),
                 'risk_distribution', (SELECT COALESCE(json_agg(risk_bands ORDER BY band), '[]'::json) FROM risk_bands),
                 'top_users', (SELECT COALESCE(json_agg(top_users), '[]'::json) FROM top_users),
                 'recent_alerts', (SELECT COALESCE(json_agg(recent_alerts), '[]'::json) FROM recent_alerts),
-                'department_rollup', (SELECT COALESCE(json_agg(dept_rollup), '[]'::json) FROM dept_rollup)
+                'department_rollup', (SELECT COALESCE(json_agg(dept_rollup), '[]'::json) FROM dept_rollup),
+                'weekly_trends', (SELECT COALESCE(json_agg(weekly_trends), '[]'::json) FROM weekly_trends)
             ) AS payload
             """,
             (RISK_THRESHOLD, RISK_THRESHOLD),
@@ -623,30 +612,42 @@ def get_history(user_id: str, authorization: Optional[str] = Header(default=None
         get_current_admin(cur, authorization)
         cur.execute(
             """
-            WITH event_rollup AS (
-                SELECT
-                    user_id,
-                    event_timestamp,
-                    COUNT(*) AS logon_count,
-                    COUNT(DISTINCT COALESCE(device_id::text, 'unknown')) AS device_count
-                FROM events.login_events
-                WHERE user_id = %s
-                GROUP BY user_id, event_timestamp
-            )
-            SELECT r.score_id, r.anomaly_score, r.anomaly_flag, r.risk_score, r.risk_level,
-                   r.alert_flag, r.event_timestamp, r.model_version_id, r.window_start, r.created_at,
-                   r.feature_vector, COALESCE(e.logon_count, 0) AS logon_count,
-                   COALESCE(e.device_count, 0) AS device_count
-            FROM security.risk_scores_new r
-            LEFT JOIN event_rollup e
-              ON e.user_id = r.user_id AND e.event_timestamp = r.event_timestamp
+            SELECT r.score_id, r.if_score AS anomaly_score, r.anomaly_flag, r.risk_score, r.risk_level,
+                   r.alert_flag, r.window_start AS event_timestamp, NULL AS model_version_id, r.window_start, r.created_at,
+                   r.feature_vector, COALESCE(f.logon_count, 0) AS logon_count,
+                   COALESCE(f.unique_pcs, 0) AS device_count, r.cluster_probability, r.if_anomaly
+            FROM security.risk_scores r
+            LEFT JOIN features.user_behavior_features f
+              ON f.user_id = r.user_id AND f.window_start = r.window_start
             WHERE r.user_id = %s
-            ORDER BY event_timestamp DESC
+            ORDER BY r.window_start DESC
             LIMIT 100
             """,
-            (user_id, user_id),
+            (user_id,),
         )
-        return [dict(r) for r in cur.fetchall()]
+        windows = [dict(r) for r in cur.fetchall()]
+
+        # Query weekly trends for this user
+        cur.execute(
+            """
+            SELECT
+                batch_date::text AS batch_date,
+                COUNT(*) AS total_windows,
+                SUM(CASE WHEN anomaly_flag = TRUE THEN 1 ELSE 0 END) AS anomaly_count,
+                COALESCE((SUM(CASE WHEN anomaly_flag = TRUE THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0)::float) * 100, 0) AS anomaly_rate
+            FROM security.risk_scores
+            WHERE user_id = %s
+            GROUP BY batch_date
+            ORDER BY batch_date ASC
+            """,
+            (user_id,),
+        )
+        weekly_trends = [dict(r) for r in cur.fetchall()]
+
+        return {
+            "windows": windows,
+            "weekly_trends": weekly_trends
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -657,20 +658,52 @@ def get_history(user_id: str, authorization: Optional[str] = Header(default=None
 
 
 @router.get("/alerts")
-def get_alerts(user_id: str, authorization: Optional[str] = Header(default=None)):
+def get_alerts(
+    user_id: Optional[str] = Query(default=None),
+    batch_date: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    latest_only: bool = Query(default=True),
+    authorization: Optional[str] = Header(default=None)
+):
     try:
         conn, cur = get_cursor()
         get_current_admin(cur, authorization)
-        cur.execute(
-            """
-            SELECT alert_id, user_id, risk_score_id, severity, status, created_at
-            FROM security.alerts
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-            LIMIT 100
-            """,
-            (user_id,),
-        )
+        
+        # Build SQL query dynamically
+        query = """
+            SELECT a.alert_id, a.user_id, a.batch_date::text, a.anomaly_count, a.window_days, a.severity, a.status, a.created_at,
+                   u.full_name, u.employee_id, d.department_name AS department, rl.role_name AS role
+            FROM security.alerts a
+            JOIN core.users u ON u.user_id = a.user_id
+            LEFT JOIN core.departments d ON d.department_id = u.department_id
+            LEFT JOIN core.roles rl ON rl.role_id = u.role_id
+            WHERE 1=1
+        """
+        params = []
+        
+        if user_id:
+            query += " AND a.user_id = %s::uuid"
+            params.append(user_id)
+        else:
+            # When user_id is not specified, we might want to filter by batch_date
+            resolved_batch_date = batch_date
+            if not resolved_batch_date and latest_only:
+                cur.execute("SELECT MAX(batch_date) AS max_date FROM security.alerts")
+                max_row = cur.fetchone()
+                if max_row and max_row["max_date"]:
+                    resolved_batch_date = str(max_row["max_date"])
+            
+            if resolved_batch_date:
+                query += " AND a.batch_date = %s"
+                params.append(resolved_batch_date)
+                
+        if status:
+            query += " AND a.status = %s"
+            params.append(status)
+            
+        query += " ORDER BY a.created_at DESC LIMIT 200"
+        
+        cur.execute(query, tuple(params))
         return [dict(r) for r in cur.fetchall()]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -681,204 +714,38 @@ def get_alerts(user_id: str, authorization: Optional[str] = Header(default=None)
             conn.close()
 
 
-# ---------------------------------------------------------------------------
-# REAL-TIME STREAMING ENDPOINTS
-# ---------------------------------------------------------------------------
+class UpdateAlertRequest(BaseModel):
+    status: str
 
 
-@router.post("/stream/ingest")
-def stream_ingest(data: IngestEvent, authorization: Optional[str] = Header(default=None)):
-    """
-    Ingest a raw log event and immediately run the full ML pipeline.
-
-    This is the primary ingestion endpoint for real-time sources:
-    Windows Event Log collectors, SIEMs, EDR agents, or the live_replay.py
-    demo engine.  The scored result is published to all connected SSE clients.
-
-    No manual history is required — the system pulls the last 20 events
-    from the database automatically to build the behavioral baseline.
-    """
+@router.patch("/alerts/{alert_id}")
+def update_alert(
+    alert_id: int,
+    data: UpdateAlertRequest,
+    authorization: Optional[str] = Header(default=None)
+):
+    if data.status not in ["OPEN", "RESOLVED"]:
+        raise HTTPException(status_code=400, detail="Status must be OPEN or RESOLVED")
     try:
         conn, cur = get_cursor()
-
-        # --- Auth (optional for internal ingest; replay engine passes token) ---
-        if authorization and authorization.startswith("Bearer "):
-            get_current_admin(cur, authorization)
-
-        # --- Verify user exists ---
-        cur.execute("SELECT 1 FROM core.users WHERE user_id = %s", (data.user_id,))
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail=f"User {data.user_id!r} not found")
-
-        # --- Ensure DB partitions exist for this timestamp ---
-        ensure_monthly_partitions(cur, data.timestamp)
-
-        # --- Build behavioral history from DB (last 20 windows) ---
+        get_current_admin(cur, authorization)
         cur.execute(
             """
-            SELECT r.event_timestamp, r.feature_vector
-            FROM security.risk_scores_new r
-            WHERE r.user_id = %s
-            ORDER BY r.event_timestamp DESC
-            LIMIT 20
+            UPDATE security.alerts
+            SET status = %s
+            WHERE alert_id = %s
+            RETURNING alert_id, status
             """,
-            (data.user_id,),
+            (data.status, alert_id),
         )
-        history_rows = cur.fetchall()
-
-        logon_counts = []
-        device_counts = []
-        past_logins = []
-        for row in reversed(history_rows):  # oldest first
-            fv = row["feature_vector"]
-            if isinstance(fv, str):
-                fv = json.loads(fv)
-            # Reconstruct logon/device counts from feature vector
-            logon_counts.append(max(1, int(round(fv.get("logon_deviation", 0) + 2))))
-            device_counts.append(max(1, int(round(fv.get("device_deviation", 0) + 1))))
-            past_logins.append(str(row["event_timestamp"]))
-
-        user_history_dict = {
-            "logon_counts": logon_counts,
-            "unique_pcs_history": device_counts,
-            "past_logins": past_logins,
-            "current_logon_count": data.logons,
-            "current_unique_pcs": data.devices,
-            "current_logoff_count": 0,
-        }
-
-        # --- Feature engineering ---
-        event_payload = {"timestamp": data.timestamp, "logons": data.logons, "devices": data.devices}
-        raw_features = compute_features(event_payload, user_history_dict)
-        features = {k: (v if v is not None else 0) for k, v in raw_features.items()}
-        features["night_activity_flag"] = bool(features.get("night_activity_flag", False))
-
-        # --- ML inference ---
-        raw_model_flag, anomaly_score = predict(features)
-        risk_value = anomaly_score_to_risk(anomaly_score)
-        anomaly_flag = risk_value >= ANOMALY_FLAG_THRESHOLD
-        risk_level = resolve_risk_level(risk_value)
-        is_high_risk = risk_value >= RISK_THRESHOLD
-
-        # --- Persist login event ---
-        cur.execute(
-            """
-            INSERT INTO events.login_events
-            (user_id, event_timestamp, login_status, ip_address, device_id)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (data.user_id, data.timestamp, "SUCCESS", data.ip_address, None),
-        )
-
-        # --- Persist feature vector ---
-        cur.execute(
-            """
-            DELETE FROM features.user_behavior_features
-            WHERE user_id = %s AND window_start = %s
-            """,
-            (data.user_id, data.timestamp),
-        )
-        cur.execute(
-            """
-            INSERT INTO features.user_behavior_features (
-                user_id, window_start, z_logon, z_pcs, logon_deviation, device_deviation,
-                device_ratio, burst_score, hour_deviation, session_gap, logon_logoff_ratio,
-                night_activity_flag
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                data.user_id, data.timestamp,
-                features["z_logon"], features["z_pcs"],
-                features["logon_deviation"], features["device_deviation"],
-                features["device_ratio"], features["burst_score"],
-                features["hour_deviation"], features["session_gap"],
-                features["logon_logoff_ratio"], features["night_activity_flag"],
-            ),
-        )
-
-        # --- Persist risk score ---
-        cur.execute(
-            """
-            INSERT INTO security.risk_scores_new (
-                user_id, anomaly_score, anomaly_flag, risk_score, risk_level,
-                alert_flag, event_timestamp, model_version_id, feature_vector, window_start
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                data.user_id, float(anomaly_score), bool(anomaly_flag),
-                risk_value, risk_level, is_high_risk, data.timestamp,
-                "if_v1_standard_scaler", json.dumps(features), data.timestamp,
-            ),
-        )
-
-        # --- Auto-raise alert if high risk ---
-        created_alert = False
-        if is_high_risk:
-            cur.execute(
-                """
-                INSERT INTO security.alerts (user_id, risk_score_id, severity, status)
-                SELECT %s, NULL, 'HIGH', 'OPEN'
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM security.alerts WHERE user_id = %s AND status = 'OPEN'
-                )
-                """,
-                (data.user_id, data.user_id),
-            )
-            created_alert = cur.rowcount > 0
-
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Alert not found")
         conn.commit()
-
-        # --- Fetch user metadata for the SSE payload ---
-        cur.execute(
-            """
-            SELECT u.full_name, u.employee_id, d.department_name, r.role_name
-            FROM core.users u
-            LEFT JOIN core.departments d ON d.department_id = u.department_id
-            LEFT JOIN core.roles r ON r.role_id = u.role_id
-            WHERE u.user_id = %s
-            """,
-            (data.user_id,),
-        )
-        user_meta = cur.fetchone() or {}
-
-        result = {
-            "type": "scored_event",
-            "user_id": data.user_id,
-            "full_name": user_meta.get("full_name", "Unknown"),
-            "employee_id": user_meta.get("employee_id", ""),
-            "department": user_meta.get("department_name", ""),
-            "role": user_meta.get("role_name", ""),
-            "timestamp": data.timestamp,
-            "source": data.source,
-            "logons": data.logons,
-            "devices": data.devices,
-            "ip_address": data.ip_address,
-            "anomaly_flag": bool(anomaly_flag),
-            "anomaly_score": float(anomaly_score),
-            "risk_score": risk_value,
-            "risk_level": risk_level,
-            "alert_created": created_alert,
-        }
-
-        # --- Publish to SSE bus (non-blocking) ---
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(stream_engine.publish(result), loop)
-        except Exception:
-            pass  # Never let SSE failure block the HTTP response
-
-        return result
-
-    except HTTPException:
-        if "conn" in locals():
-            conn.rollback()
-        raise
+        return dict(row)
     except Exception as exc:
         if "conn" in locals():
             conn.rollback()
-        logger.error("Stream ingest failed: %s", exc)
-        logger.debug(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
         if "cur" in locals():
@@ -887,128 +754,217 @@ def stream_ingest(data: IngestEvent, authorization: Optional[str] = Header(defau
             conn.close()
 
 
-@router.get("/stream/live")
-async def stream_live(token: Optional[str] = Query(default=None)):
-    """
-    Server-Sent Events endpoint.  The browser connects once and receives
-    a continuous stream of scored events as they are ingested.
-
-    Auth is via ?token=<bearer_token> query param because the browser
-    EventSource API does not support custom headers.
-    """
-    # Validate token (same session store as the rest of the API)
-    if token:
-        try:
-            conn, cur = get_cursor()
-            cur.execute(
-                """
-                SELECT s.is_active FROM security.admin_sessions s
-                WHERE s.session_token = %s AND s.is_active = TRUE
-                  AND s.expires_at > CURRENT_TIMESTAMP
-                LIMIT 1
-                """,
-                (token,),
-            )
-            if not cur.fetchone():
-                raise HTTPException(status_code=401, detail="Invalid or expired token")
-        except HTTPException:
-            raise
-        except Exception:
-            pass  # Fail open during dev — tighten in production
-        finally:
-            if "cur" in locals():
-                cur.close()
-            if "conn" in locals():
-                conn.close()
-
-    # On connect, replay last 20 scored events from DB so the page has
-    # immediate context rather than starting empty
-    seed_events: list[dict] = []
+@router.get("/anomalies")
+def get_all_anomalies(
+    user_id: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None)
+):
     try:
-        conn2, cur2 = get_cursor()
-        cur2.execute(
-            """
-            SELECT
-                r.user_id, r.risk_score, r.anomaly_flag, r.risk_level,
-                r.anomaly_score, r.event_timestamp,
-                u.full_name, u.employee_id,
-                d.department_name, ro.role_name
-            FROM security.risk_scores_new r
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+        
+        query = """
+            SELECT r.score_id, r.user_id, r.batch_date::text, r.window_start::text AS timestamp, 
+                   r.shift, r.role_group, r.hdbscan_label, r.is_noise, r.if_score AS anomaly_score, 
+                   r.risk_score, r.risk_level, r.anomaly_flag, r.alert_flag, r.feature_vector,
+                   r.cluster_probability, r.if_anomaly,
+                   u.full_name, u.employee_id, d.department_name AS department, rl.role_name AS role
+            FROM security.risk_scores r
             JOIN core.users u ON u.user_id = r.user_id
             LEFT JOIN core.departments d ON d.department_id = u.department_id
-            LEFT JOIN core.roles ro ON ro.role_id = u.role_id
-            ORDER BY r.event_timestamp DESC
-            LIMIT 20
-            """
-        )
-        for row in reversed(cur2.fetchall()):
-            seed_events.append({
-                "type": "seed_event",
-                "user_id": str(row["user_id"]),
-                "full_name": row["full_name"],
-                "employee_id": row["employee_id"],
-                "department": row["department_name"] or "",
-                "role": row["role_name"] or "",
-                "timestamp": str(row["event_timestamp"]),
-                "risk_score": float(row["risk_score"] or 0),
-                "anomaly_flag": bool(row["anomaly_flag"]),
-                "risk_level": row["risk_level"] or "LOW",
-                "anomaly_score": float(row["anomaly_score"] or 0),
-                "source": "history",
-            })
-    except Exception:
-        pass
+            LEFT JOIN core.roles rl ON rl.role_id = u.role_id
+            WHERE r.anomaly_flag = TRUE
+        """
+        params = []
+        if user_id:
+            query += " AND r.user_id = %s::uuid"
+            params.append(user_id)
+            
+        query += " ORDER BY r.window_start DESC LIMIT 200"
+        
+        cur.execute(query, tuple(params))
+        return [dict(row) for row in cur.fetchall()]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
-        if "cur2" in locals():
-            cur2.close()
-        if "conn2" in locals():
-            conn2.close()
-
-    async def event_generator() -> AsyncGenerator[str, None]:
-        # First yield historical seed events so the UI isn't blank
-        import json as _json
-        for evt in seed_events:
-            yield f"data: {_json.dumps(evt, default=str)}\n\n"
-        # Then stream live events
-        async for chunk in stream_engine.subscribe():
-            yield chunk
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-        },
-    )
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
 
 
-@router.get("/stream/status")
-def stream_status():
-    """Returns the current state of the SSE bus and autonomous replay engine."""
-    from app.services.auto_replay import auto_replay_engine
-    status = stream_engine.get_status()
-    status.update(auto_replay_engine.get_status())
-    return status
+# ---------------------------------------------------------------------------
+# PIPELINE ENDPOINTS
+# ---------------------------------------------------------------------------
+
+_LOG_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "daily_logs",
+)
 
 
-@router.post("/stream/scenario")
-def set_scenario(
-    body: ScenarioRequest,
+def _run_pipeline_job(job_id: str, file_path: str, batch_date: str) -> None:
+    """
+    Executed in a background thread.
+    Updates the job store on completion or failure.
+    """
+    from app.services.batch_pipeline import run_batch_pipeline  # lazy import avoids circular
+
+    with _jobs_lock:
+        _jobs[job_id]["status"] = "running"
+
+    try:
+        summary = run_batch_pipeline(file_path, batch_date)
+        with _jobs_lock:
+            _jobs[job_id].update({
+                "status":      "complete",
+                "summary":     summary,
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
+        logger.info("Pipeline job %s finished: %s", job_id, summary)
+
+    except Exception as exc:
+        with _jobs_lock:
+            _jobs[job_id].update({
+                "status":      "failed",
+                "error":       str(exc),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            })
+        logger.exception("Pipeline job %s failed", job_id)
+
+
+@router.post("/pipeline/upload-log")
+async def upload_log(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(..., description="CSV log file (columns: user_id, timestamp, logon_count, logoff_count, unique_pcs)"),
+    batch_date: Optional[str] = Query(
+        default=None,
+        description="Date for this batch (YYYY-MM-DD). Defaults to today's UTC date.",
+    ),
     authorization: Optional[str] = Header(default=None),
 ):
     """
-    Set the active anomaly scenario for the live_replay.py demo engine.
-    The replay engine polls this endpoint to determine which anomaly
-    patterns to inject.
+    Upload a daily log CSV and trigger the batch ML pipeline.
+
+    Returns immediately with a **job_id** — the pipeline runs in the
+    background.  Poll ``GET /pipeline/status/{job_id}`` for results.
+
+    The file is saved to ``data/daily_logs/{batch_date}_log.csv``
+    before the pipeline is started.
     """
-    valid = {"normal", "burst_alert", "night_intrusion", "device_spread"}
-    if body.scenario not in valid:
+    # Auth
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+    # Resolve batch_date
+    if not batch_date:
+        batch_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    else:
+        # Validate format
+        try:
+            datetime.strptime(batch_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"batch_date must be YYYY-MM-DD, got: {batch_date!r}",
+            )
+
+    # Validate file extension
+    filename = file.filename or "upload.csv"
+    ext = os.path.splitext(filename.lower())[1]
+    if ext not in [".csv", ".xlsx", ".xls"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid scenario. Must be one of: {sorted(valid)}",
+            detail="Uploaded file must be a .csv, .xlsx, or .xls"
         )
-    stream_engine.set_scenario(body.scenario)
-    return {"scenario": body.scenario, "message": "Scenario updated"}
+
+    # Save file
+    os.makedirs(_LOG_DIR, exist_ok=True)
+    dest_path = os.path.join(_LOG_DIR, f"{batch_date}_log{ext}")
+    try:
+        with open(dest_path, "wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {exc}") from exc
+    finally:
+        await file.close()
+
+    # Register job
+    job_id = str(uuid.uuid4())
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "job_id":     job_id,
+            "status":     "queued",
+            "batch_date": batch_date,
+            "file_path":  dest_path,
+            "summary":    None,
+            "error":      None,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+        }
+
+    # Launch background task
+    background_tasks.add_task(_run_pipeline_job, job_id, dest_path, batch_date)
+
+    logger.info(
+        "Pipeline job %s queued | batch_date=%s | file=%s",
+        job_id, batch_date, dest_path,
+    )
+
+    return {
+        "job_id":      job_id,
+        "status":      "queued",
+        "batch_date":  batch_date,
+        "file_saved":  dest_path,
+        "message":     "Pipeline started. Poll /pipeline/status/{job_id} for results.",
+    }
+
+
+@router.get("/pipeline/status/{job_id}")
+def pipeline_status(
+    job_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
+    """
+    Return the current status of a pipeline job.
+
+    Possible status values:
+      - ``queued``   — job is waiting to start
+      - ``running``  — pipeline is executing
+      - ``complete`` — finished successfully; ``summary`` field contains results
+      - ``failed``   — pipeline raised an exception; ``error`` field contains message
+    """
+    # Auth
+    try:
+        conn, cur = get_cursor()
+        get_current_admin(cur, authorization)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        if "cur" in locals():
+            cur.close()
+        if "conn" in locals():
+            conn.close()
+
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id!r} not found. It may have expired or never existed.",
+        )
+
+    return job

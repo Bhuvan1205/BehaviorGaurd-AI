@@ -8,7 +8,7 @@ def setup_db():
         user="postgres",
         password="Bhuvan2005!",
         host="localhost",
-        port="5432"
+        port="5433"
     )
     conn.autocommit = True
     cur = conn.cursor()

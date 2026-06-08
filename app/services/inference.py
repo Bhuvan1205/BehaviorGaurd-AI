@@ -1,109 +1,163 @@
-"""
-Production inference module for BehaviorGuard-AI.
-
-Runs single-event anomaly prediction using the pre-trained artifacts
-from notebooks/V6.ipynb:
-
-  1. Load artifacts once via model_loader (singleton).
-  2. Scale the 10-element feature vector with the saved RobustScaler.
-  3. Score with the saved IsolationForest.
-
-Inference pipeline extracted from V6.ipynb:
-  • execution_count 30  — iso = IsolationForest(n_estimators=200,
-                                                contamination=0.06,
-                                                random_state=42, n_jobs=-1)
-  • execution_count 31  — iso.decision_function(X) / iso.predict(X)
-  • execution_count 32  — anomaly flag: predict == -1  →  True (anomaly)
-  • execution_count 62  — sanity check: scaler_loaded.transform → iso_loaded.predict
-"""
-
+import logging
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import RobustScaler
 
-from app.core.model_loader import get_model, get_scaler, get_feature_list
+# Use sklearn's HDBSCAN (available in scikit-learn >= 1.3)
+from sklearn.cluster import HDBSCAN as _HDBSCAN
+
+from app.core.model_loader import get_model, get_scaler
+
+logger = logging.getLogger(__name__)
+
+IF_FEATURES = [
+    "z_logon", "z_pcs", "logon_deviation", "device_deviation",
+    "device_ratio", "burst_score", "hour_deviation", "session_gap",
+    "logon_logoff_ratio", "night_activity_flag",
+]
+
+def _determine_shift(hour: int) -> str:
+    if 9 <= hour <= 16:
+        return "Day"
+    if 17 <= hour <= 21:
+        return "Evening"
+    return "Night"
 
 
-_artifacts_ready = False
+def _resolve_risk_level(risk_score: float) -> str:
+    if risk_score >= 0.80:
+        return "HIGH"
+    if risk_score >= 0.68:
+        return "ELEVATED"
+    if risk_score >= 0.50:
+        return "GUARDED"
+    return "LOW"
 
 
-def load_model() -> None:
+def run_inference(df: pd.DataFrame, cur) -> pd.DataFrame:
     """
-    Eagerly load all inference artifacts into memory.
-
-    Calls the singleton loader so that subsequent predict() calls
-    never hit disk.  Safe to call multiple times.
+    Executes V6 clustering and anomaly scoring:
+      1. Contextual Segmentation (Shift × Role Group).
+      2. HDBSCAN fit-predict per context to compute labels and probabilities.
+      3. Risk scoring & anomaly flags based on HDBSCAN output.
+      4. Global Isolation Forest continuous scoring & anomaly check.
     """
-    global _artifacts_ready
-    # These calls trigger _load_artifacts() at most once (singleton).
-    get_model()
-    get_scaler()
-    get_feature_list()
-    _artifacts_ready = True
+    logger.info("Starting ML Inference (V6 Pipeline)...")
+    df = df.copy()
 
+    # ── 1. Shift & Role Group Segmentation ────────────────────────────────────
+    df["shift"] = df["hour"].apply(_determine_shift)
 
-def predict(features: list) -> dict:
-    """
-    Run anomaly inference on a single feature vector.
+    # Fetch role groups from the database for the batch users
+    user_ids = df["user_id"].unique().tolist()
+    role_map = {}
+    if user_ids:
+        placeholders = ",".join(["%s"] * len(user_ids))
+        cur.execute(
+            f"""
+            SELECT u.user_id::text, r.role_name
+            FROM core.users u
+            LEFT JOIN core.roles r ON r.role_id = u.role_id
+            WHERE u.user_id = ANY(ARRAY[{placeholders}]::uuid[])
+            """,
+            user_ids,
+        )
+        for row in cur.fetchall():
+            # Map role names to lowercase clean role groups
+            role_name = (row["role_name"] or "general").lower().strip()
+            role_map[str(row["user_id"])] = role_name
 
-    Parameters
-    ----------
-    features : list[float]
-        Ordered 10-element feature list produced by
-        ``app.services.feature_engine.compute_features``.
-        Order MUST match notebooks/artifacts/feature_list.json.
+    df["role_group"] = df["user_id"].apply(lambda uid: role_map.get(str(uid), "general"))
 
-    Returns
-    -------
-    dict
-        {
-            "anomaly_flag": int,      # 1 = anomaly, 0 = normal
-            "anomaly_score": float    # continuous decision_function score
-        }
+    # ── 2. HDBSCAN Clustering ─────────────────────────────────────────────────
+    df["hdbscan_label"] = 0
+    df["cluster_probability"] = 1.0
+    df["is_noise"] = False
 
-    Raises
-    ------
-    ValueError
-        If ``features`` length does not equal the expected feature count.
-    """
-    model = get_model()
-    scaler = get_scaler()
-    feature_list = get_feature_list()
+    groups = df.groupby(["shift", "role_group"])
+    for (shift, rg), subset in groups:
+        idx = subset.index
 
-    expected_len = len(feature_list)
-    if len(features) != expected_len:
-        raise ValueError(
-            f"Feature vector length mismatch: "
-            f"expected {expected_len}, got {len(features)}"
+        # V6 Notebook requires group size >= 100 for clustering
+        if len(subset) < 100:
+            df.loc[idx, "hdbscan_label"] = 0
+            df.loc[idx, "cluster_probability"] = 1.0
+            df.loc[idx, "is_noise"] = False
+            continue
+
+        # Extract features and handle inf/nan values
+        X = (
+            subset[IF_FEATURES]
+            .replace([np.inf, -np.inf], np.nan)
+            .fillna(0)
+        )
+        # Convert bool to int/float for scikit-learn compatibility
+        if "night_activity_flag" in X.columns:
+            X = X.copy()
+            X["night_activity_flag"] = X["night_activity_flag"].astype(int)
+
+        scaler = RobustScaler()
+        X_scaled = scaler.fit_transform(X.values)
+
+        # Compute dynamic parameters for small weekly batches (V6 notebook parameters for large groups)
+        min_cluster_size = min(50, max(5, int(len(subset) * 0.05)))
+        min_samples = max(2, int(min_cluster_size * 0.2))
+
+        # Fit HDBSCAN (V6 notebook exact parameters)
+        clusterer = _HDBSCAN(
+            min_cluster_size=min_cluster_size,
+            min_samples=min_samples,
+            metric="euclidean",
+            cluster_selection_method="eom"
+        )
+        labels = clusterer.fit_predict(X_scaled)
+        probabilities = clusterer.probabilities_
+
+        df.loc[idx, "hdbscan_label"] = labels
+        df.loc[idx, "cluster_probability"] = probabilities
+        df.loc[idx, "is_noise"] = (labels == -1)
+
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        n_noise    = (labels == -1).sum()
+        logger.info(
+            "  HDBSCAN  %s | %-25s  %d records  →  %d clusters  %d noise (min_sz=%d, min_samp=%d)",
+            shift, rg, len(subset), n_clusters, n_noise, min_cluster_size, min_samples
         )
 
-    # Build a named DataFrame so sklearn receives the feature names
-    # the model was fitted with (eliminates the UserWarning).
-    X = pd.DataFrame([features], columns=feature_list)
-
-    # Replace inf / NaN with 0  (mirrors notebook cleanup logic)
-    X = X.replace([np.inf, -np.inf], 0.0).fillna(0.0)
-
-    # Scale features using the saved RobustScaler
-    # The scaler was fitted on numpy arrays (group[features].values in V6),
-    # so pass .values to avoid a "fitted without feature names" warning.
-    # The IsolationForest was fitted on a named DataFrame (df_v6[features]),
-    # so wrap the scaled output back into a DataFrame for the model.
-    X_scaled = pd.DataFrame(
-        scaler.transform(X.values), columns=feature_list
+    # ── 3. V6 Risk Score Calculation ──────────────────────────────────────────
+    # Formula: risk_score = (is_noise)*0.6 + (1 - prob)*0.4
+    df["risk_score"] = (
+        (df["hdbscan_label"] == -1).astype(int) * 0.6
+        +
+        (1.0 - df["cluster_probability"]) * 0.4
     )
-    print("SCALED:", X_scaled.values.tolist()[0])
+    df["risk_score"] = df["risk_score"].clip(0.0, 1.0)
+    df["anomaly_flag"] = df["risk_score"] > 0.6
+    df["risk_level"] = df["risk_score"].apply(_resolve_risk_level)
 
-    # IsolationForest prediction
-    # V6 cell 31:  iso.predict(X)   →  -1 = anomaly, 1 = normal
-    raw_pred = model.predict(X_scaled)[0]
+    # ── 4. Global Isolation Forest Scoring ────────────────────────────────────
+    logger.info("Executing Global Isolation Forest Scoring...")
+    iso = get_model()
+    global_scaler = get_scaler()
 
-    # V6 cell 31:  iso.decision_function(X)  →  continuous anomaly score
-    anomaly_score = float(model.decision_function(X_scaled)[0])
+    # Extract all features for the entire batch
+    X_global = (
+        df[IF_FEATURES]
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(0)
+    )
+    if "night_activity_flag" in X_global.columns:
+        X_global = X_global.copy()
+        X_global["night_activity_flag"] = X_global["night_activity_flag"].astype(int)
 
-    # V6 cell 32:  df_v6["if_anomaly"] = df_v6["if_anomaly"] == -1
-    anomaly_flag = 1 if raw_pred == -1 else 0
+    X_global_scaled = global_scaler.transform(X_global.values)
+    X_global_scaled_df = pd.DataFrame(X_global_scaled, columns=IF_FEATURES)
+    df["if_score"] = iso.decision_function(X_global_scaled_df)
+    df["if_anomaly"] = iso.predict(X_global_scaled_df) == -1
 
-    return {
-        "anomaly_flag": anomaly_flag,
-        "anomaly_score": anomaly_score,
-    }
+    anomaly_count = df["anomaly_flag"].sum()
+    logger.info(
+        "Scoring complete | %d anomalies detected by HDBSCAN | %d by Isolation Forest",
+        anomaly_count, df["if_anomaly"].sum(),
+    )
+    return df

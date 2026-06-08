@@ -70,13 +70,22 @@ CREATE INDEX idx_file_user_time
 ON events.file_events(user_id, event_timestamp);
 
 CREATE TABLE events.email_events (
-    event_id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY,
     user_id UUID REFERENCES core.users(user_id),
+    employee_id VARCHAR(50) NOT NULL,
+    email_date TIMESTAMP NOT NULL,
     event_timestamp TIMESTAMP NOT NULL,
+    pc VARCHAR(50) NOT NULL,
+    sender_email VARCHAR(150) NOT NULL,
+    recipient_to TEXT NOT NULL,
     recipient_count INTEGER,
     external_recipient BOOLEAN,
-    attachment_count INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    activity VARCHAR(50) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    attachment_count INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX idx_email_user_time
 ON events.email_events(user_id, event_timestamp);

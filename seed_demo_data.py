@@ -21,7 +21,7 @@ DB_CONFIG = {
     "user": "postgres",
     "password": "Bhuvan2005!",
     "host": "localhost",
-    "port": "5432",
+    "port": "5433",
 }
 
 SEED = 42

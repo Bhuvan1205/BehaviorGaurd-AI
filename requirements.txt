@@ -18,6 +18,7 @@ ipykernel>=6.25.0
 # API Development (if needed for deployment)
 fastapi>=0.100.0
 uvicorn>=0.23.0
+python-multipart>=0.0.7
 pydantic>=2.0.0
 httpx>=0.27.0
 

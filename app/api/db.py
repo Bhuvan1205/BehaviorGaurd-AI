@@ -8,7 +8,7 @@ def get_connection():
         user="postgres",              # 🔁 update if needed
         password="Bhuvan2005!",          # 🔁 update
         host="localhost",
-        port="5432"
+        port="5433"
     )
 
 
