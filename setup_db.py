@@ -30,17 +30,54 @@ def setup_db():
             # Ignore CREATE DATABASE
             sql = sql.replace("CREATE DATABASE behavior_guard_ai;", "-- CREATE DATABASE behavior_guard_ai;")
 
-        # Split into individual statements using sqlparse to properly handle $$ quotes
-        statements = sqlparse.split(sql)
+        # Custom state machine to split statements, avoiding sqlparse which might hang on some environments
+        statements = []
+        current_stmt = []
+        in_single_quote = False
+        in_dollar_quote = False
+        dollar_tag = ""
+        
+        i = 0
+        length = len(sql)
+        while i < length:
+            char = sql[i]
+            
+            if char == "'" and not in_dollar_quote:
+                in_single_quote = not in_single_quote
+                current_stmt.append(char)
+                i += 1
+                continue
+                
+            if char == '$' and not in_single_quote:
+                tag_end = sql.find('$', i + 1)
+                if tag_end != -1:
+                    potential_tag = sql[i:tag_end+1]
+                    if not in_dollar_quote:
+                        in_dollar_quote = True
+                        dollar_tag = potential_tag
+                    elif in_dollar_quote and potential_tag == dollar_tag:
+                        in_dollar_quote = False
+                        dollar_tag = ""
+                    current_stmt.append(potential_tag)
+                    i = tag_end + 1
+                    continue
+                    
+            if char == ';' and not in_single_quote and not in_dollar_quote:
+                statements.append("".join(current_stmt).strip())
+                current_stmt = []
+                i += 1
+                continue
+                
+            current_stmt.append(char)
+            i += 1
+            
+        if "".join(current_stmt).strip():
+            statements.append("".join(current_stmt).strip())
+
         success_count = 0
         ignored_count = 0
 
-        for stmt in statements:
-            stmt_clean = stmt.strip()
-            # Remove trailing semicolon for psycopg2 execution
-            if stmt_clean.endswith(";"):
-                stmt_clean = stmt_clean[:-1].strip()
-
+        for stmt_clean in statements:
             if not stmt_clean:
                 continue
 
