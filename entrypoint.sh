@@ -24,12 +24,12 @@ print('PostgreSQL did not become ready in time. Exiting.')
 sys.exit(1)
 "
 
-echo "Running database schema migrations..."
-python setup_db.py
-
 echo "Starting Uvicorn backend server..."
 uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 UVICORN_PID=$!
+
+echo "Running database schema migrations in background..."
+python setup_db.py &
 
 if [ "$SEED_DEMO_DATA" = "true" ]; then
   echo "Seeding database with initial demo data (background)..."

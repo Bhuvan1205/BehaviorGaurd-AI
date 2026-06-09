@@ -7,6 +7,40 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+def _tables_ready(cur):
+    """Return True if all required flat tables exist with the correct schema."""
+    required = [
+        ("core",     "users"),
+        ("security", "risk_scores"),
+        ("security", "alerts"),
+        ("security", "admin_users"),
+        ("features", "user_behavior_features"),
+        ("events",   "email_events"),
+    ]
+    for schema, table in required:
+        cur.execute(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = %s AND table_name = %s",
+            (schema, table),
+        )
+        if not cur.fetchone():
+            print(f"  Missing table: {schema}.{table}")
+            return False
+
+    # Also confirm risk_scores is NOT partitioned (flat check)
+    cur.execute(
+        "SELECT c.relkind FROM pg_class c "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = 'security' AND c.relname = 'risk_scores'",
+    )
+    row = cur.fetchone()
+    if row and row[0] == 'p':
+        print("  security.risk_scores is still partitioned — migration needed.")
+        return False
+
+    return True
+
+
 def setup_db():
     conn = psycopg2.connect(
         dbname=os.getenv("DB_NAME", "behavior_guard_ai"),
@@ -17,6 +51,19 @@ def setup_db():
     )
     conn.autocommit = True
     cur = conn.cursor()
+
+    # ── Fast-path: skip all migrations if the schema is already correct ──────
+    print("Checking database schema state...")
+    try:
+        if _tables_ready(cur):
+            print("All required tables exist with correct schema. Skipping migrations.")
+            cur.close()
+            conn.close()
+            return
+        else:
+            print("Schema incomplete or outdated — running full migrations.")
+    except Exception as e:
+        print(f"Schema check warning (will run full migrations): {e}")
 
     # Pre-migration cleanup: check if we need to migrate from partitioned to flat tables
     try:
