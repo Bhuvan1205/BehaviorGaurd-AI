@@ -105,26 +105,21 @@ def _compute_seed_features(event_payload: dict, history_payload: dict) -> dict:
     }
 
 def predict(features: dict) -> tuple[int, float]:
-    """Run ML inference. Falls back to (0, 0.0) if model files are missing."""
-    try:
-        model = get_model()
-        scaler = get_scaler()
-        feature_names = get_feature_list()
-
-        raw_vector = np.array(
-            [[float(features.get(name, 0)) for name in feature_names]],
-            dtype=float,
-        )
-        scaled = scaler.transform(raw_vector)
-        scaled_frame = pd.DataFrame(scaled, columns=feature_names)
-
-        score = model.decision_function(scaled_frame)[0]
-        flag = int(model.predict(scaled_frame)[0] == -1)
-        return flag, float(score)
-    except FileNotFoundError:
-        # Model artifacts not present (e.g. on Render where .pkl files are git-ignored).
-        # derive_demo_risk still produces realistic scores without the model pressure.
-        return 0, 0.0
+    """Extremely fast mock predict for seeding to avoid CPU starvation / timeouts on Render.
+    derive_demo_risk will still produce realistic risk scores.
+    """
+    logon_dev = float(features.get("logon_deviation", 0.0))
+    device_dev = float(features.get("device_deviation", 0.0))
+    hour_dev = float(features.get("hour_deviation", 0.0))
+    
+    deviation = logon_dev + device_dev * 2.0 + hour_dev
+    if deviation > 4.0:
+        score = -0.15 - (deviation - 4.0) * 0.02
+        flag = 1
+    else:
+        score = 0.15 - deviation * 0.05
+        flag = 0
+    return flag, float(score)
 
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME", "behavior_guard_ai"),
@@ -396,6 +391,15 @@ def main():
     cur = conn.cursor()
 
     try:
+        # Check if users already exist in the database. If so, skip seeding to save boot time.
+        cur.execute("SELECT COUNT(*) FROM core.users;")
+        user_count = cur.fetchone()[0]
+        if user_count > 0:
+            print("Database already contains seeded users. Skipping demo data seeding.")
+            cur.close()
+            conn.close()
+            return
+
         ensure_monthly_partitions(cur)
 
         demo_employee_ids = [profile.employee_id for profile in profiles]
