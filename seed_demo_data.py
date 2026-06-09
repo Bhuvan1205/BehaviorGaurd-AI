@@ -22,6 +22,14 @@ import numpy as np
 import pandas as pd
 
 
+def _determine_shift(hour: int) -> str:
+    if 9 <= hour <= 16:
+        return "Day"
+    if 17 <= hour <= 21:
+        return "Evening"
+    return "Night"
+
+
 def _compute_seed_features(event_payload: dict, history_payload: dict) -> dict:
     """Lightweight inline feature computation for seeding, matching feature_engine logic."""
     logon_counts = history_payload.get("logon_counts", [])
@@ -190,17 +198,7 @@ def stable_uuid(label: str) -> str:
 
 
 def ensure_monthly_partitions(cur) -> None:
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS features.user_behavior_features_2026_03
-        PARTITION OF features.user_behavior_features
-        FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
-
-        CREATE TABLE IF NOT EXISTS security.risk_scores_2026_03
-        PARTITION OF security.risk_scores_new
-        FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
-        """
-    )
+    pass
 
 
 def build_user_profiles() -> list[UserProfile]:
@@ -561,7 +559,12 @@ def main():
                     feature_rows.append(
                         (
                             profile.user_id,
+                            event_time.date(),
                             event_time,
+                            int(window["logons"]),
+                            0,
+                            int(window["devices"]),
+                            int(event_time.hour),
                             features["z_logon"],
                             features["z_pcs"],
                             features["logon_deviation"],
@@ -578,15 +581,21 @@ def main():
                     risk_rows.append(
                         (
                             profile.user_id,
-                            "if_v1_standard_scaler",
+                            event_time.date(),
                             event_time,
-                            aggregated_risk,
-                            bool(anomaly_flag),
+                            _determine_shift(event_time.hour),
+                            profile.role.lower().strip(),
+                            0,
+                            0,
+                            False,
                             anomaly_score,
-                            event_time,
+                            aggregated_risk,
                             "HIGH" if is_high_risk else "LOW",
+                            bool(anomaly_flag),
                             bool(is_high_risk),
                             json.dumps(features),
+                            1.0,
+                            bool(anomaly_flag),
                         )
                     )
 
@@ -645,9 +654,9 @@ def main():
             cur,
             """
             INSERT INTO features.user_behavior_features (
-                user_id, window_start, z_logon, z_pcs, logon_deviation, device_deviation,
-                device_ratio, burst_score, hour_deviation, session_gap, logon_logoff_ratio,
-                night_activity_flag
+                user_id, batch_date, window_start, logon_count, logoff_count, unique_pcs, hour,
+                z_logon, z_pcs, logon_deviation, device_deviation, device_ratio, burst_score,
+                hour_deviation, session_gap, logon_logoff_ratio, night_activity_flag
             )
             VALUES %s
             """,
@@ -659,8 +668,10 @@ def main():
             cur,
             """
             INSERT INTO security.risk_scores (
-                user_id, model_version_id, window_start, risk_score, anomaly_flag,
-                anomaly_score, event_timestamp, risk_level, alert_flag, feature_vector
+                user_id, batch_date, window_start, shift, role_group,
+                cluster_id, hdbscan_label, is_noise, if_score, risk_score,
+                risk_level, anomaly_flag, alert_flag, feature_vector,
+                cluster_probability, if_anomaly
             )
             VALUES %s
             """,

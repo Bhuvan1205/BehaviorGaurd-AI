@@ -18,6 +18,32 @@ def setup_db():
     conn.autocommit = True
     cur = conn.cursor()
 
+    # Pre-migration cleanup: check if we need to migrate from partitioned to flat tables
+    try:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'security' AND table_name = 'risk_scores_old'
+            ) OR EXISTS (
+                SELECT 1 FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'features' AND c.relname = 'user_behavior_features' AND c.relkind = 'p'
+            );
+            """
+        )
+        needs_flattening = cur.fetchone()[0]
+        if needs_flattening:
+            print("Detected legacy partitioned tables or risk_scores_old. Performing one-time flattening drop...")
+            cur.execute("DROP TABLE IF EXISTS security.alerts CASCADE;")
+            cur.execute("DROP TABLE IF EXISTS security.risk_scores CASCADE;")
+            cur.execute("DROP TABLE IF EXISTS security.risk_scores_old CASCADE;")
+            cur.execute("DROP TABLE IF EXISTS security.risk_scores_new CASCADE;")
+            cur.execute("DROP TABLE IF EXISTS features.user_behavior_features CASCADE;")
+            print("One-time flattening drop complete.")
+    except Exception as e:
+        print("Pre-migration cleanup warning:", e)
+
     sql_files = sorted(glob.glob("Database/DB M*.sql"))
     print(f"Found SQL files: {sql_files}")
 
