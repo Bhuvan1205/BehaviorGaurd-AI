@@ -391,11 +391,11 @@ def main():
     cur = conn.cursor()
 
     try:
-        # Check if users already exist in the database. If so, skip seeding to save boot time.
-        cur.execute("SELECT COUNT(*) FROM core.users;")
-        user_count = cur.fetchone()[0]
-        if user_count > 0:
-            print("Database already contains seeded users. Skipping demo data seeding.")
+        # Check if risk scores already exist in the database. If so, skip seeding to save boot time.
+        cur.execute("SELECT COUNT(*) FROM security.risk_scores;")
+        risk_count = cur.fetchone()[0]
+        if risk_count > 0:
+            print("Database already contains seeded risk scores. Skipping demo data seeding.")
             cur.close()
             conn.close()
             return
