@@ -48,7 +48,7 @@ def setup_db():
             except Exception as e:
                 err_msg = str(e).lower()
                 # Ignore expected warnings when running on cloud databases (e.g. Supabase, Neon)
-                if any(x in err_msg for x in ["already exists", "permission denied", "must be superuser", "role", "grant", "connect"]):
+                if any(x in err_msg for x in ["already exists", "permission denied", "must be superuser", "role", "grant", "connect", "empty query"]):
                     ignored_count += 1
                 else:
                     print(f"❌ Critical error on statement: {stmt_clean[:150]}...")
