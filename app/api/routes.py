@@ -757,6 +757,7 @@ def update_alert(
 @router.get("/anomalies")
 def get_all_anomalies(
     user_id: Optional[str] = Query(default=None),
+    anomaly_only: bool = Query(default=True),
     authorization: Optional[str] = Header(default=None)
 ):
     try:
@@ -773,12 +774,14 @@ def get_all_anomalies(
             JOIN core.users u ON u.user_id = r.user_id
             LEFT JOIN core.departments d ON d.department_id = u.department_id
             LEFT JOIN core.roles rl ON rl.role_id = u.role_id
-            WHERE r.anomaly_flag = TRUE
+            WHERE 1=1
         """
         params = []
         if user_id:
             query += " AND r.user_id = %s::uuid"
             params.append(user_id)
+        if anomaly_only:
+            query += " AND r.anomaly_flag = TRUE"
             
         query += " ORDER BY r.window_start DESC LIMIT 200"
         

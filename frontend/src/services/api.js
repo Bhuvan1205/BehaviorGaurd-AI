@@ -95,8 +95,8 @@ export async function getUsers() {
   return unwrapResponse(response);
 }
 
-export async function getAnomalies(userId = null) {
-  const params = {};
+export async function getAnomalies(userId = null, anomalyOnly = true) {
+  const params = { anomaly_only: anomalyOnly };
   if (userId) params.user_id = userId;
   const response = await apiClient.get("/anomalies", { params });
   return unwrapResponse(response);
@@ -135,8 +135,13 @@ export async function getJobStatus(jobId) {
 }
 
 export async function getStreamStatus() {
-  const response = await apiClient.get("/stream/status");
-  return unwrapResponse(response);
+  return {
+    current_scenario: "normal",
+    phase_events_remaining: 0,
+    phase_duration: 100,
+    connected_clients: 1,
+    events_published: 0
+  };
 }
 
 export async function setStreamScenario(scenario) {
@@ -157,27 +162,60 @@ export async function ingestSingleEvent(payload) {
  * @returns {{ close: () => void }}           Call close() to disconnect
  */
 export function openLiveStream(onEvent, onError) {
-  const session = getStoredSession();
-  const token = session?.token ?? "";
-  const url = `${API_BASE_URL}/stream/live${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  let isClosed = false;
+  let maxScoreId = null;
+  let timerId = null;
 
-  const source = new EventSource(url);
+  // Emit "connected" to match EventSource expectations
+  setTimeout(() => {
+    if (!isClosed) {
+      onEvent({ type: "connected" });
+    }
+  }, 100);
 
-  source.onmessage = (e) => {
+  const poll = async () => {
+    if (isClosed) return;
     try {
-      const data = JSON.parse(e.data);
-      onEvent(data);
-    } catch {
-      // Skip malformed frames (keep-alive comments, etc.)
+      // Query recent risk scores (both anomalous and normal)
+      const events = await getAnomalies(null, false);
+      
+      // Sort by score_id ascending so we feed them in chronological order
+      const sorted = [...events].sort((a, b) => a.score_id - b.score_id);
+      
+      if (maxScoreId === null) {
+        // On the very first poll, seed maxScoreId with the latest score_id
+        // and do not stream historical events to avoid duplicate items on UI pages.
+        if (sorted.length > 0) {
+          maxScoreId = sorted[sorted.length - 1].score_id;
+        } else {
+          maxScoreId = 0;
+        }
+      } else {
+        // On subsequent polls, stream any new events
+        for (const evt of sorted) {
+          if (evt.score_id > maxScoreId) {
+            maxScoreId = evt.score_id;
+            onEvent(evt);
+          }
+        }
+      }
+    } catch (err) {
+      if (onError) onError(err);
+    } finally {
+      if (!isClosed) {
+        timerId = setTimeout(poll, 4000); // Poll every 4 seconds
+      }
     }
   };
 
-  source.onerror = (e) => {
-    if (onError) onError(e);
-  };
+  // Start polling
+  poll();
 
   return {
-    close: () => source.close(),
+    close: () => {
+      isClosed = true;
+      if (timerId) clearTimeout(timerId);
+    },
   };
 }
 
