@@ -16,9 +16,9 @@ __pycache__/
 *.swo
 .DS_Store
 Thumbs.db
-*.pkl
 *.h5
 *.joblib
+# Allow tracked model .pkl files (e.g. notebooks/models/*.pkl added explicitly)
 tempCodeRunnerFile.python
 notebooks/if_tuning_results.csv
 notebooks/artifacts/*.csv
@@ -32,8 +32,8 @@ temp/
 # Exclude email pipeline notebook for now
 notebooks/Email_pipeline.ipynb
 
-# Models and assignments
-notebooks/models/
+# Models - exclude large validation model but allow core inference models
+notebooks/models/rf_validation_model.pkl
 
 # Local Environment Secret Configs
 .env

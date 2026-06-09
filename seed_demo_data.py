@@ -97,20 +97,26 @@ def _compute_seed_features(event_payload: dict, history_payload: dict) -> dict:
     }
 
 def predict(features: dict) -> tuple[int, float]:
-    model = get_model()
-    scaler = get_scaler()
-    feature_names = get_feature_list()
-    
-    raw_vector = np.array(
-        [[float(features.get(name, 0)) for name in feature_names]],
-        dtype=float,
-    )
-    scaled = scaler.transform(raw_vector)
-    scaled_frame = pd.DataFrame(scaled, columns=feature_names)
-    
-    score = model.decision_function(scaled_frame)[0]
-    flag = int(model.predict(scaled_frame)[0] == -1)
-    return flag, float(score)
+    """Run ML inference. Falls back to (0, 0.0) if model files are missing."""
+    try:
+        model = get_model()
+        scaler = get_scaler()
+        feature_names = get_feature_list()
+
+        raw_vector = np.array(
+            [[float(features.get(name, 0)) for name in feature_names]],
+            dtype=float,
+        )
+        scaled = scaler.transform(raw_vector)
+        scaled_frame = pd.DataFrame(scaled, columns=feature_names)
+
+        score = model.decision_function(scaled_frame)[0]
+        flag = int(model.predict(scaled_frame)[0] == -1)
+        return flag, float(score)
+    except FileNotFoundError:
+        # Model artifacts not present (e.g. on Render where .pkl files are git-ignored).
+        # derive_demo_risk still produces realistic scores without the model pressure.
+        return 0, 0.0
 
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME", "behavior_guard_ai"),
