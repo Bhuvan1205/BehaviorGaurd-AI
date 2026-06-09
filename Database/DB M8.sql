@@ -5,12 +5,12 @@
 
 -- Drop partitioned/old tables and their associated dependencies
 DROP TABLE IF EXISTS security.risk_scores_old CASCADE;
-DROP TABLE IF EXISTS security.risk_scores CASCADE;
-DROP TABLE IF EXISTS features.user_behavior_features CASCADE;
-DROP TABLE IF EXISTS security.alerts CASCADE;
+-- DROP TABLE IF EXISTS security.risk_scores CASCADE;
+-- DROP TABLE IF EXISTS features.user_behavior_features CASCADE;
+-- DROP TABLE IF EXISTS security.alerts CASCADE;
 
 -- Create flat security.risk_scores table
-CREATE TABLE security.risk_scores (
+CREATE TABLE IF NOT EXISTS security.risk_scores (
     score_id           BIGSERIAL PRIMARY KEY,
     user_id            UUID NOT NULL REFERENCES core.users(user_id) ON DELETE CASCADE,
     batch_date         DATE DEFAULT CURRENT_DATE,
@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_risk_anomaly   ON security.risk_scores (anomaly_f
 CREATE INDEX IF NOT EXISTS idx_risk_batch     ON security.risk_scores (batch_date DESC);
 
 -- Create flat features.user_behavior_features table
-CREATE TABLE features.user_behavior_features (
+CREATE TABLE IF NOT EXISTS features.user_behavior_features (
     id                 BIGSERIAL PRIMARY KEY,
     user_id            UUID NOT NULL REFERENCES core.users(user_id) ON DELETE CASCADE,
     batch_date         DATE DEFAULT CURRENT_DATE,
@@ -61,7 +61,7 @@ CREATE TABLE features.user_behavior_features (
 CREATE INDEX IF NOT EXISTS idx_features_user_date ON features.user_behavior_features (user_id, batch_date);
 
 -- Recreate security.alerts (flat / batch-oriented)
-CREATE TABLE security.alerts (
+CREATE TABLE IF NOT EXISTS security.alerts (
     alert_id           BIGSERIAL PRIMARY KEY,
     user_id            UUID NOT NULL REFERENCES core.users(user_id) ON DELETE CASCADE,
     batch_date         DATE DEFAULT CURRENT_DATE,
