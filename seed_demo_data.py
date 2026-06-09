@@ -8,20 +8,40 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
+import os
 import psycopg2
 from psycopg2.extras import execute_values
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from app.config import RISK_THRESHOLD
 from app.services.feature_engine import compute_features
-from app.services.model_service import predict
+from app.core.model_loader import get_model, get_scaler, get_feature_list
 
+def predict(features: dict) -> tuple[int, float]:
+    model = get_model()
+    scaler = get_scaler()
+    feature_names = get_feature_list()
+    
+    raw_vector = np.array(
+        [[float(features.get(name, 0)) for name in feature_names]],
+        dtype=float,
+    )
+    scaled = scaler.transform(raw_vector)
+    scaled_frame = pd.DataFrame(scaled, columns=feature_names)
+    
+    score = model.decision_function(scaled_frame)[0]
+    flag = int(model.predict(scaled_frame)[0] == -1)
+    return flag, float(score)
 
 DB_CONFIG = {
-    "dbname": "behavior_guard_ai",
-    "user": "postgres",
-    "password": "Bhuvan2005!",
-    "host": "localhost",
-    "port": "5433",
+    "dbname": os.getenv("DB_NAME", "behavior_guard_ai"),
+    "user": os.getenv("DB_USER", "postgres"),
+    "password": os.getenv("DB_PASSWORD", "Bhuvan2005!"),
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5433"),
 }
 
 SEED = 42

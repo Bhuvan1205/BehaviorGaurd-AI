@@ -48,15 +48,19 @@ from datetime import datetime, timedelta
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # ── DB connection (mirrors app/api/db.py) ────────────────────────────────────
 
 DB_CONFIG = dict(
-    dbname   = "behavior_guard_ai",
-    user     = "postgres",
-    password = "Bhuvan2005!",
-    host     = "localhost",
-    port     = "5433",
+    dbname   = os.getenv("DB_NAME", "behavior_guard_ai"),
+    user     = os.getenv("DB_USER", "postgres"),
+    password = os.getenv("DB_PASSWORD", "Bhuvan2005!"),
+    host     = os.getenv("DB_HOST", "localhost"),
+    port     = os.getenv("DB_PORT", "5433"),
 )
 
 # ── Scenario definitions (identical to live_replay.py / auto_replay.py) ──────

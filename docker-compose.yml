@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: behaviorguard-db
+    restart: always
+    environment:
+      POSTGRES_DB: behavior_guard_ai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Bhuvan2005!
+    ports:
+      # Map standard 5432 in container to 5433 on host
+      # This allows existing local python scripts to connect on 5433
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d behavior_guard_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: behaviorguard-backend
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=behavior_guard_ai
+      - DB_USER=postgres
+      - DB_PASSWORD=Bhuvan2005!
+      - SEED_DEMO_DATA=true # Auto-seeding initial demo database on first boot
+      # Pass through OpenAI keys from host environment/.env if present
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME:-gpt-4o-mini}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Optional: mount logs or daily upload folder if persistence outside container is needed
+      - backend_logs:/workspace/data/daily_logs
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build Vite to use Nginx local reverse proxy prefix
+        - VITE_API_BASE_URL=/api
+    container_name: behaviorguard-frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_logs:

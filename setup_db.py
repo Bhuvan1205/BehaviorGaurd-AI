@@ -1,14 +1,18 @@
 import psycopg2
 import glob
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 def setup_db():
     conn = psycopg2.connect(
-        dbname="behavior_guard_ai",
-        user="postgres",
-        password="Bhuvan2005!",
-        host="localhost",
-        port="5433"
+        dbname=os.getenv("DB_NAME", "behavior_guard_ai"),
+        user=os.getenv("DB_USER", "postgres"),
+        password=os.getenv("DB_PASSWORD", "Bhuvan2005!"),
+        host=os.getenv("DB_HOST", "localhost"),
+        port=os.getenv("DB_PORT", "5433")
     )
     conn.autocommit = True
     cur = conn.cursor()

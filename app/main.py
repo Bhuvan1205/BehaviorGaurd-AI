@@ -3,6 +3,10 @@ from sklearn.exceptions import InconsistentVersionWarning
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables early
+load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
