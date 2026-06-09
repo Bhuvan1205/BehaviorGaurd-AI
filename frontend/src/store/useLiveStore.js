@@ -1,7 +1,7 @@
 /**
  * useLiveStore.js
  *
- * Global Zustand store for the SSE live event stream.
+ * Global Zustand store for the batch-wise database polling.
  * The connection is opened ONCE in AppLayout and persists across all page
  * navigations.  Any component can read events from this store without
  * owning the connection or losing data when it unmounts.
@@ -32,7 +32,7 @@ export const useLiveStore = create((set, get) => ({
   _recentHighRisk: [],      // timestamps of recent anomalies
   _burstTimer: null,
 
-  // ── Open / close SSE connection ───────────────────────────────────────────
+  // ── Open / close database polling stream ──────────────────────────────────
   openStream() {
     const existing = get().streamRef;
     if (existing) return; // already open

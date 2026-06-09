@@ -13,7 +13,7 @@ export function AppLayout() {
 
   useEffect(() => {
     startAutoRefresh(15000);
-    openStream();          // open SSE once — persists across all page navigation
+    openStream();          // open polling stream once — persists across all page navigation
     return () => {
       stopAutoRefresh();
       closeStream();       // only closes on logout / app unmount

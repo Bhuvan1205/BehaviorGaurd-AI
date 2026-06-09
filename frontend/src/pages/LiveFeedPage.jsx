@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
-  Bot,
   Radio,
   Shield,
   ShieldAlert,
@@ -12,7 +11,6 @@ import {
   WifiOff,
   Zap,
 } from "lucide-react";
-import { getStreamStatus } from "../services/api";
 import { useLiveStore } from "../store/useLiveStore";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -73,7 +71,6 @@ export function LiveFeedPage() {
   const burstAlert   = useLiveStore((s) => s.burstAlert);
   const scoreboard   = useLiveStore((s) => s.scoreboard);
 
-  const [streamStatus, setStreamStatus] = useState(null);
   const [filterRiskOnly, setFilterRiskOnly] = useState(false);
 
   const tickerRef = useRef(null);
@@ -82,19 +79,6 @@ export function LiveFeedPage() {
   useEffect(() => {
     if (tickerRef.current) tickerRef.current.scrollTop = 0;
   }, [events]);
-
-  // Stream status polling (every 5s)
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const s = await getStreamStatus();
-        setStreamStatus(s);
-      } catch {/* ignore */}
-    };
-    poll();
-    const id = setInterval(poll, 5000);
-    return () => clearInterval(id);
-  }, []);
 
   // ── Derived data ────────────────────────────────────────────────────────
 
@@ -128,8 +112,8 @@ export function LiveFeedPage() {
               Live Threat Feed
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400">
-              Real-time behavioral events streamed via SSE — every login is scored by the
-              Isolation Forest model the instant it arrives.
+              Risk scores from the daily log batch runs — updated dynamically as the batch
+              pipeline processes new logs.
             </p>
           </div>
 
@@ -139,11 +123,11 @@ export function LiveFeedPage() {
               className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
                 connected
                   ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-                  : "border-rose-400/20 bg-rose-400/10 text-rose-200"
+                  : "border-slate-500/20 bg-slate-500/10 text-slate-400"
               }`}
             >
               {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
-              {connected ? "SSE Connected" : "Connecting..."}
+              {connected ? "Polling Active" : "Checking Feed..."}
             </div>
 
             {/* Burst badge */}
@@ -176,87 +160,7 @@ export function LiveFeedPage() {
         )}
       </section>
 
-      {/* ── Auto-Mode Status Panel ── */}
-      <section className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/20">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-2.5 text-cyan-300">
-              <Bot size={20} />
-            </span>
-            <div>
-              <h2 className="text-base font-semibold text-white">Auto-Mode Active</h2>
-              <p className="mt-0.5 text-sm text-slate-400">
-                The backend is automatically rotating through all threat scenarios.
-                No manual input required.
-              </p>
-            </div>
-          </div>
 
-          {streamStatus && (
-            <div className="flex flex-wrap gap-3">
-              {/* Current scenario badge */}
-              {(() => {
-                const meta = SCENARIO_META[streamStatus.current_scenario] ?? SCENARIO_META.normal;
-                return (
-                  <div className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold ${meta.border} ${meta.color}`}>
-                    <span>{meta.icon}</span>
-                    {meta.label}
-                  </div>
-                );
-              })()}
-
-              {/* Phase progress */}
-              <div className="inline-flex flex-col justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-400">
-                <span className="mb-1 font-medium text-slate-300">
-                  Phase: {streamStatus.phase_events_remaining ?? "—"} events left
-                </span>
-                <div className="h-1 w-32 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-cyan-400 transition-all duration-500"
-                    style={{
-                      width: streamStatus.phase_duration
-                        ? `${Math.round(
-                            ((streamStatus.phase_duration - (streamStatus.phase_events_remaining ?? 0)) /
-                              streamStatus.phase_duration) *
-                              100
-                          )}%`
-                        : "0%",
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="inline-flex flex-col justify-center gap-0.5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-400">
-                <span>{streamStatus.connected_clients} client{streamStatus.connected_clients !== 1 ? "s" : ""} connected</span>
-                <span>{streamStatus.events_published} events published</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Scenario legend */}
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {Object.entries(SCENARIO_META).map(([id, meta]) => (
-            <div
-              key={id}
-              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-sm ${
-                streamStatus?.current_scenario === id
-                  ? meta.border
-                  : "border-white/5 bg-white/[0.02] opacity-50"
-              }`}
-            >
-              <span>{meta.icon}</span>
-              <span className={streamStatus?.current_scenario === id ? meta.color : "text-slate-400"}>
-                {meta.label}
-              </span>
-              {streamStatus?.current_scenario === id && (
-                <span className="ml-auto flex h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* ── KPI strip ── */}
       <div className="grid gap-4 sm:grid-cols-3">
@@ -304,8 +208,8 @@ export function LiveFeedPage() {
             {displayEvents.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-slate-500">
                 {connected
-                  ? "Waiting for events… Run live_replay.py to start"
-                  : "Connecting to stream…"}
+                  ? "Waiting for events… Upload a daily log CSV in the Upload section to run the pipeline."
+                  : "Checking threat feed…"}
               </div>
             ) : (
               <div className="space-y-1.5">

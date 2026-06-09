@@ -79,7 +79,7 @@ export function MonitoringPage() {
       .finally(() => setIsLoading(false));
   }, [selectedUserId]);
 
-  // ── SSE subscription — filter events for selected user ─────────────────
+  // ── Polling subscription — filter events for selected user ──────────────
   useEffect(() => {
     if (streamRef.current) {
       streamRef.current.close();
@@ -166,11 +166,11 @@ export function MonitoringPage() {
               Monitoring
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400 sm:text-base">
-              Streaming live events for{" "}
+              Monitored events for{" "}
               <span className="font-semibold text-slate-200">
                 {selectedUser?.full_name ?? "the selected user"}
               </span>{" "}
-              via SSE — updates the instant a new event is scored.
+              — updates dynamically as new daily log batches are processed.
             </p>
           </div>
 
@@ -183,7 +183,7 @@ export function MonitoringPage() {
               }`}
             >
               {streamConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
-              {streamConnected ? "SSE live" : "Stream idle"}
+              {streamConnected ? "Polling Active" : "Stream Idle"}
             </div>
             <div className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-300">
               <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
@@ -239,7 +239,7 @@ export function MonitoringPage() {
           <div>
             <h2 className="text-lg font-semibold text-white">Risk timeline</h2>
             <p className="mt-1 text-sm text-slate-400">
-              Updates in real time as events stream in via SSE.
+              Updates dynamically as new daily log batches are processed.
             </p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
@@ -315,7 +315,7 @@ export function MonitoringPage() {
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
               {selectedUserId
                 ? streamConnected
-                  ? "No events for this user yet — events are being auto-generated"
+                  ? "No events for this user in the current session. Upload a CSV to trigger analysis."
                   : "Stream idle — select a user"
                 : "Select a user to monitor"}
             </div>

@@ -134,32 +134,12 @@ export async function getJobStatus(jobId) {
   return unwrapResponse(response);
 }
 
-export async function getStreamStatus() {
-  return {
-    current_scenario: "normal",
-    phase_events_remaining: 0,
-    phase_duration: 100,
-    connected_clients: 1,
-    events_published: 0
-  };
-}
-
-export async function setStreamScenario(scenario) {
-  const response = await apiClient.post("/stream/scenario", { scenario });
-  return unwrapResponse(response);
-}
-
-export async function ingestSingleEvent(payload) {
-  const response = await apiClient.post("/stream/ingest", payload);
-  return unwrapResponse(response);
-}
-
 /**
- * Open a persistent SSE connection to /stream/live.
+ * Start a client-side polling mechanism to fetch scored anomalies/events.
  *
- * @param {(event: object) => void} onEvent   Called for every scored event
- * @param {(error: Event) => void}  onError   Called on connection error
- * @returns {{ close: () => void }}           Call close() to disconnect
+ * @param {(event: object) => void} onEvent   Called for every new scored event
+ * @param {(error: Error) => void}  onError   Called on polling error
+ * @returns {{ close: () => void }}           Call close() to stop polling
  */
 export function openLiveStream(onEvent, onError) {
   let isClosed = false;
