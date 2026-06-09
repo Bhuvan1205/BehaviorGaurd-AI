@@ -47,6 +47,8 @@ def setup_db():
             # Replace database name reference in SQL statements (like GRANT CONNECT ON DATABASE)
             stmt_clean = stmt_clean.replace("behavior_guard_ai", db_name)
 
+            print(f"Executing statement: {stmt_clean[:100]}...")
+
             try:
                 cur.execute(stmt_clean)
                 success_count += 1
