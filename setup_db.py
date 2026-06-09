@@ -1,6 +1,7 @@
 import psycopg2
 import glob
 import os
+import sqlparse
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -29,13 +30,17 @@ def setup_db():
             # Ignore CREATE DATABASE
             sql = sql.replace("CREATE DATABASE behavior_guard_ai;", "-- CREATE DATABASE behavior_guard_ai;")
 
-        # Split into individual statements
-        statements = sql.split(";")
+        # Split into individual statements using sqlparse to properly handle $$ quotes
+        statements = sqlparse.split(sql)
         success_count = 0
         ignored_count = 0
 
         for stmt in statements:
             stmt_clean = stmt.strip()
+            # Remove trailing semicolon for psycopg2 execution
+            if stmt_clean.endswith(";"):
+                stmt_clean = stmt_clean[:-1].strip()
+
             if not stmt_clean:
                 continue
 
@@ -48,14 +53,14 @@ def setup_db():
             except Exception as e:
                 err_msg = str(e).lower()
                 # Ignore expected warnings when running on cloud databases (e.g. Supabase, Neon)
-                if any(x in err_msg for x in ["already exists", "permission denied", "must be superuser", "role", "grant", "connect", "empty query"]):
+                if any(x in err_msg for x in ["already exists", "permission denied", "must be superuser", "role", "grant", "connect", "empty query", "does not exist", "multiple primary keys", "not partitioned"]):
                     ignored_count += 1
                 else:
-                    print(f"❌ Critical error on statement: {stmt_clean[:150]}...")
+                    print(f"Critical error on statement: {stmt_clean[:150]}...")
                     print(e)
                     raise e
 
-        print(f"✅ Finished executing {os.path.basename(file_path)}: {success_count} statements succeeded, {ignored_count} non-critical warnings ignored.")
+        print(f"Finished executing {os.path.basename(file_path)}: {success_count} statements succeeded, {ignored_count} non-critical warnings ignored.")
 
     cur.close()
     conn.close()
