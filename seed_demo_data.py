@@ -409,7 +409,7 @@ def main():
 
         if existing_demo_user_ids:
             cur.execute("DELETE FROM security.alerts WHERE user_id = ANY(%s::uuid[])", (existing_demo_user_ids,))
-            cur.execute("DELETE FROM security.risk_scores_new WHERE user_id = ANY(%s::uuid[])", (existing_demo_user_ids,))
+            cur.execute("DELETE FROM security.risk_scores WHERE user_id = ANY(%s::uuid[])", (existing_demo_user_ids,))
             cur.execute("DELETE FROM features.user_behavior_features WHERE user_id = ANY(%s::uuid[])", (existing_demo_user_ids,))
             cur.execute("DELETE FROM events.login_events WHERE user_id = ANY(%s::uuid[])", (existing_demo_user_ids,))
             cur.execute("DELETE FROM core.devices WHERE assigned_user_id = ANY(%s::uuid[])", (existing_demo_user_ids,))
@@ -650,17 +650,6 @@ def main():
                 night_activity_flag
             )
             VALUES %s
-            ON CONFLICT (user_id, window_start) DO UPDATE SET
-                z_logon = EXCLUDED.z_logon,
-                z_pcs = EXCLUDED.z_pcs,
-                logon_deviation = EXCLUDED.logon_deviation,
-                device_deviation = EXCLUDED.device_deviation,
-                device_ratio = EXCLUDED.device_ratio,
-                burst_score = EXCLUDED.burst_score,
-                hour_deviation = EXCLUDED.hour_deviation,
-                session_gap = EXCLUDED.session_gap,
-                logon_logoff_ratio = EXCLUDED.logon_logoff_ratio,
-                night_activity_flag = EXCLUDED.night_activity_flag
             """,
             feature_rows,
             page_size=1000,
@@ -669,7 +658,7 @@ def main():
         execute_values(
             cur,
             """
-            INSERT INTO security.risk_scores_new (
+            INSERT INTO security.risk_scores (
                 user_id, model_version_id, window_start, risk_score, anomaly_flag,
                 anomaly_score, event_timestamp, risk_level, alert_flag, feature_vector
             )
