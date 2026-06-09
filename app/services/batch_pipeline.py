@@ -114,16 +114,19 @@ def _write_risk_scores(df: pd.DataFrame, batch_date: str, conn, cur) -> None:
             bool(row["if_anomaly"]),
         ))
 
-    cur.executemany(
+    from psycopg2.extras import execute_values
+    execute_values(
+        cur,
         """
         INSERT INTO security.risk_scores
           (user_id, batch_date, window_start, shift, role_group,
            cluster_id, hdbscan_label, is_noise, if_score, risk_score,
            risk_level, anomaly_flag, alert_flag, feature_vector,
            cluster_probability, if_anomaly)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+        VALUES %s
         """,
         records,
+        page_size=2000
     )
     logger.info("Step 4 — Inserted %d rows into security.risk_scores", len(records))
 
@@ -142,20 +145,25 @@ def _alert_check(df: pd.DataFrame, batch_date: str, conn, cur) -> int:
 
     user_ids = df["user_id"].unique().tolist()
 
-    for user_id in user_ids:
-        # Count distinct weeks with ≥1 anomaly in the rolling window
+    # Query distinct weeks with >=1 anomaly in the rolling window for all users in one batch
+    anomaly_days_map = {}
+    if user_ids:
         cur.execute(
             """
-            SELECT COUNT(DISTINCT batch_date) AS anomaly_days
+            SELECT user_id::text, COUNT(DISTINCT batch_date) AS anomaly_days
             FROM security.risk_scores
-            WHERE user_id = %s::uuid
+            WHERE user_id = ANY(%s::uuid[])
               AND batch_date >= %s
               AND anomaly_flag = TRUE
+            GROUP BY user_id
             """,
-            (user_id, cutoff_date),
+            (user_ids, cutoff_date),
         )
-        result       = cur.fetchone()
-        anomaly_days = int(result["anomaly_days"] or 0) if result else 0
+        rows = cur.fetchall()
+        anomaly_days_map = {row["user_id"]: int(row["anomaly_days"]) for row in rows}
+
+    for user_id in user_ids:
+        anomaly_days = anomaly_days_map.get(user_id, 0)
 
         if anomaly_days >= ALERT_ANOMALY_DAYS:
             # Flip alert_flag on all records for this user/batch_date

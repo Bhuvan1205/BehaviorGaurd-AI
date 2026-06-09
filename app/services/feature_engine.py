@@ -184,7 +184,9 @@ def write_features_to_db(df: pd.DataFrame, batch_date: str, cur) -> None:
             bool(row.get("night_activity_flag", False)),
         ))
 
-    cur.executemany(
+    from psycopg2.extras import execute_values
+    execute_values(
+        cur,
         """
         INSERT INTO features.user_behavior_features
           (user_id, batch_date, window_start,
@@ -192,7 +194,8 @@ def write_features_to_db(df: pd.DataFrame, batch_date: str, cur) -> None:
            z_logon, z_pcs, logon_deviation, device_deviation,
            device_ratio, burst_score, hour_deviation, session_gap,
            logon_logoff_ratio, night_activity_flag)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES %s
         """,
         records,
+        page_size=2000
     )
