@@ -191,6 +191,8 @@ def login(data: LoginRequest):
         if "conn" in locals():
             conn.rollback()
         raise
+    except HTTPException:
+        raise
     except Exception as exc:
         if "conn" in locals():
             conn.rollback()
@@ -224,6 +226,8 @@ def register(data: RegisterRequest):
         admin = cur.fetchone()
         conn.commit()
         return dict(admin)
+    except HTTPException:
+        raise
     except Exception as exc:
         if "conn" in locals():
             conn.rollback()
@@ -255,6 +259,8 @@ def logout(authorization: Optional[str] = Header(default=None)):
         if "conn" in locals():
             conn.rollback()
         raise
+    except HTTPException:
+        raise
     except Exception as exc:
         if "conn" in locals():
             conn.rollback()
@@ -279,6 +285,7 @@ def me(authorization: Optional[str] = Header(default=None)):
             "username": admin["username"],
         }
     except HTTPException:
+
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -354,6 +361,8 @@ def get_users(authorization: Optional[str] = Header(default=None)):
             """
         )
         return [dict(row) for row in cur.fetchall()]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -447,6 +456,7 @@ def get_user_detail(user_id: str, authorization: Optional[str] = Header(default=
             raise HTTPException(status_code=404, detail="User not found")
         return dict(row)
     except HTTPException:
+
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -593,6 +603,8 @@ def get_dashboard_summary(authorization: Optional[str] = Header(default=None)):
             (RISK_THRESHOLD, RISK_THRESHOLD),
         )
         return cur.fetchone()["payload"]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -648,6 +660,8 @@ def get_history(user_id: str, authorization: Optional[str] = Header(default=None
             "windows": windows,
             "weekly_trends": weekly_trends
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -705,6 +719,8 @@ def get_alerts(
         
         cur.execute(query, tuple(params))
         return [dict(r) for r in cur.fetchall()]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -743,6 +759,8 @@ def update_alert(
             raise HTTPException(status_code=404, detail="Alert not found")
         conn.commit()
         return dict(row)
+    except HTTPException:
+        raise
     except Exception as exc:
         if "conn" in locals():
             conn.rollback()
@@ -787,6 +805,8 @@ def get_all_anomalies(
         
         cur.execute(query, tuple(params))
         return [dict(row) for row in cur.fetchall()]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -826,6 +846,8 @@ def _run_pipeline_job(job_id: str, file_path: str, batch_date: str) -> None:
             })
         logger.info("Pipeline job %s finished: %s", job_id, summary)
 
+    except HTTPException:
+        raise
     except Exception as exc:
         with _jobs_lock:
             _jobs[job_id].update({
@@ -860,6 +882,7 @@ async def upload_log(
         conn, cur = get_cursor()
         get_current_admin(cur, authorization)
     except HTTPException:
+
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -897,6 +920,8 @@ async def upload_log(
     try:
         with open(dest_path, "wb") as fh:
             shutil.copyfileobj(file.file, fh)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {exc}") from exc
     finally:
@@ -952,6 +977,7 @@ def pipeline_status(
         conn, cur = get_cursor()
         get_current_admin(cur, authorization)
     except HTTPException:
+
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -991,6 +1017,7 @@ async def upload_emails(
         conn, cur = get_cursor()
         get_current_admin(cur, authorization)
     except HTTPException:
+
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -1015,6 +1042,8 @@ async def upload_emails(
             df = pd.read_excel(file.file)
         else:
             df = pd.read_csv(file.file)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read file: {exc}")
 
@@ -1145,6 +1174,8 @@ async def upload_emails(
             "min_date": min_date.isoformat(),
             "max_date": max_date.isoformat()
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
@@ -1172,6 +1203,8 @@ def get_user_email_analyses(
         )
         rows = cur.fetchall()
         return [dict(r) for r in rows]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -1225,6 +1258,8 @@ def get_user_email_analysis_emails(
             return []
             
         return df_interesting.to_dict("records")
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -1265,6 +1300,8 @@ def get_all_email_analyses(
         cur.execute(query, tuple(params))
         rows = cur.fetchall()
         return [dict(r) for r in rows]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -1289,6 +1326,8 @@ def get_email_analyses_batches(
             """
         )
         return [r["batch_date"] for r in cur.fetchall()]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -1318,6 +1357,7 @@ def get_email_policy_doc(
             
         return {"policy": policy_content}
     except HTTPException:
+
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
