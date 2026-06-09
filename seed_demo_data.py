@@ -17,8 +17,84 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.config import RISK_THRESHOLD
-from app.services.feature_engine import compute_features
 from app.core.model_loader import get_model, get_scaler, get_feature_list
+import numpy as np
+import pandas as pd
+
+
+def _compute_seed_features(event_payload: dict, history_payload: dict) -> dict:
+    """Lightweight inline feature computation for seeding, matching feature_engine logic."""
+    logon_counts = history_payload.get("logon_counts", [])
+    unique_pcs_history = history_payload.get("unique_pcs_history", [])
+    past_logins = history_payload.get("past_logins", [])
+
+    def safe_mean_std(values):
+        if len(values) < 2:
+            return (float(values[0]) if values else 0.0), 1.0
+        arr = np.array(values, dtype=float)
+        mean = float(arr.mean())
+        std = float(arr.std())
+        floor = max(1.0, abs(mean) * 0.35)
+        return mean, std if std > floor else floor
+
+    avg_logon, std_logon = safe_mean_std(logon_counts)
+    avg_pcs, std_pcs = safe_mean_std(unique_pcs_history)
+    if avg_pcs == 0:
+        avg_pcs = 1.0
+
+    logon_count = int(event_payload.get("logons", 1))
+    logoff_count = int(history_payload.get("current_logoff_count", 0))
+    unique_pcs = int(event_payload.get("devices", 1))
+
+    ts = pd.Timestamp(event_payload["timestamp"])
+    hour = ts.hour
+
+    if past_logins:
+        hours_hist = [pd.Timestamp(t).hour for t in past_logins if t]
+        mean_activity_hour = float(np.mean(hours_hist)) if hours_hist else 12.0
+    else:
+        mean_activity_hour = 12.0
+
+    _sl = std_logon if std_logon > 0 else 1.0
+    _sp = std_pcs if std_pcs > 0 else 1.0
+
+    up_logon = max(0.0, logon_count - avg_logon)
+    up_device = max(0.0, unique_pcs - avg_pcs)
+
+    z_logon = up_logon / _sl
+    z_pcs = up_device / _sp
+    logon_deviation = up_logon
+    device_deviation = up_device
+    device_ratio = max(0.0, (unique_pcs / (avg_pcs + 1)) - 0.5)
+    burst_score = max(0.0, (logon_count / (avg_logon + 1)) - 0.5)
+
+    direct = abs(hour - mean_activity_hour)
+    hour_deviation = max(0.0, min(direct, 24 - direct) - 2.0)
+
+    session_gap = 0.0
+    if len(past_logins) > 1:
+        parsed = sorted(pd.to_datetime(past_logins, errors="coerce").dropna())
+        gaps = [(parsed[i] - parsed[i - 1]).total_seconds() / 3600 for i in range(1, len(parsed))]
+        typical_gap = float(np.mean(gaps)) if gaps else 4.0
+        last_ts = parsed[-1]
+        cur_gap = abs((ts - last_ts).total_seconds()) / 3600.0
+        session_gap = max(0.0, typical_gap - cur_gap)
+
+    logon_logoff_ratio = logon_count / (logoff_count + 1)
+    night_activity_flag = bool(hour >= 22 or hour <= 6)
+
+    return {
+        "z_logon": float(z_logon),
+        "z_pcs": float(z_pcs),
+        "logon_deviation": float(logon_deviation),
+        "device_deviation": float(device_deviation),
+        "device_ratio": float(device_ratio),
+        "burst_score": float(burst_score),
+        "hour_deviation": float(hour_deviation),
+        "session_gap": float(session_gap),
+        "logon_logoff_ratio": float(logon_logoff_ratio),
+        "night_activity_flag": night_activity_flag,
+    }
 
 def predict(features: dict) -> tuple[int, float]:
     model = get_model()
@@ -453,7 +529,7 @@ def main():
                         "current_unique_pcs": window["devices"],
                         "current_logoff_count": 0,
                     }
-                    features = compute_features(event_payload, history_payload)
+                    features = _compute_seed_features(event_payload, history_payload)
                     features["night_activity_flag"] = bool(features["night_activity_flag"])
 
                     _model_flag, anomaly_score = predict(features)
