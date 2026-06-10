@@ -29,30 +29,25 @@
     --app-fg: #111111;
     --app-surface: rgba(247, 244, 236, 0.94);
     --app-surface-strong: rgba(247, 244, 236, 0.98);
-    --app-surface-soft: rgba(255, 255, 255, 0.66);
-    --app-border: rgba(15, 23, 42, 0.12);
-    --app-muted: #2f2f2f;
+    --app-surface-soft: rgba(255, 255, 255, 0.55);
+    --app-border: rgba(15, 23, 42, 0.13);
+    --app-muted: #1e293b;
     --app-muted-strong: #111111;
-    --app-subtle: #5b5b5b;
+    --app-subtle: #475569;
     --app-overlay: rgba(247, 244, 236, 0.82);
-    --accent-cyan-bg: #0e3d47;
-    --accent-cyan-border: #155f6e;
-    --accent-cyan-text: #e8f9fc;
-    --accent-emerald-bg: #1a4a38;
-    --accent-emerald-border: #276b52;
-    --accent-emerald-text: #e8f8ef;
-    --accent-amber-bg: #6b4a12;
-    --accent-amber-border: #8a611a;
-    --accent-amber-text: #fff8ea;
-    --accent-rose-bg: #6b2232;
-    --accent-rose-border: #8b3344;
-    --accent-rose-text: #fff0f3;
-    --accent-sky-bg: #14405c;
-    --accent-sky-border: #1f6289;
-    --accent-sky-text: #e8f5ff;
-    --accent-indigo-bg: #2a2a6e;
-    --accent-indigo-border: #3d3da0;
-    --accent-indigo-text: #ededff;
+    /* Accent text — dark readable tones for light backgrounds */
+    --accent-cyan-text: #0c4a6e;
+    --accent-emerald-text: #064e3b;
+    --accent-amber-text: #78350f;
+    --accent-rose-text: #881337;
+    --accent-sky-text: #0c4a6e;
+    --accent-indigo-text: #312e81;
+    /* Accent borders — slightly more saturated/visible on light bg */
+    --accent-cyan-border: rgba(8, 145, 178, 0.35);
+    --accent-emerald-border: rgba(5, 150, 105, 0.35);
+    --accent-amber-border: rgba(217, 119, 6, 0.35);
+    --accent-rose-border: rgba(225, 29, 72, 0.30);
+    --accent-indigo-border: rgba(79, 70, 229, 0.30);
     --brand-bg: #f7f4ec;
     --brand-border: rgba(22, 59, 99, 0.14);
     --brand-fg: #163b63;
@@ -221,20 +216,11 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LIGHT MODE OVERRIDES
-   All rules are scoped to :root[data-theme="light"] — dark mode is untouched.
+   Philosophy: Keep ALL backgrounds at their original light/transparent tints.
+   Only fix TEXT and ICON colors to be dark and readable on the cream background.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Surface backgrounds ──────────────────────────────────────────────────── */
-
-:root[data-theme="light"] [class*="bg-slate-950"],
-:root[data-theme="light"] [class*="bg-slate-900"] {
-  background-color: var(--app-surface) !important;
-}
-
-:root[data-theme="light"] [class*="bg-white/[0.0"],
-:root[data-theme="light"] [class*="bg-white/["] {
-  background-color: var(--app-surface-soft) !important;
-}
+/* ── Surface backgrounds — translate dark slates to the cream palette ──── */
 
 :root[data-theme="light"] .bg-slate-950\/40,
 :root[data-theme="light"] .bg-slate-950\/60,
@@ -246,80 +232,101 @@
   background-color: var(--app-surface) !important;
 }
 
-:root[data-theme="light"] .bg-slate-950\/88 {
+:root[data-theme="light"] .bg-slate-950\/88,
+:root[data-theme="light"] .bg-slate-950\/95 {
   background-color: var(--app-overlay) !important;
 }
 
-:root[data-theme="light"] .bg-slate-950\/86 {
-  background-color: rgba(247, 244, 236, 0.78) !important;
-}
-
+:root[data-theme="light"] .bg-slate-900\/50,
 :root[data-theme="light"] .bg-slate-900\/80,
 :root[data-theme="light"] .bg-slate-900\/90 {
-  background-color: var(--app-surface-strong) !important;
+  background-color: rgba(247, 244, 236, 0.85) !important;
 }
 
-/* ── Borders ──────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] .bg-slate-900 {
+  background-color: rgba(247, 244, 236, 0.9) !important;
+}
 
-:root[data-theme="light"] [class*="border-white/10"] {
+/* bg-white/[0.x] transparent whites → subtle cream whites */
+:root[data-theme="light"] .bg-white\/\[0\.02\],
+:root[data-theme="light"] .bg-white\/\[0\.03\],
+:root[data-theme="light"] .bg-white\/\[0\.04\],
+:root[data-theme="light"] .bg-white\/\[0\.05\],
+:root[data-theme="light"] .bg-white\/\[0\.055\] {
+  background-color: rgba(255, 255, 255, 0.55) !important;
+}
+
+:root[data-theme="light"] .bg-white\/\[0\.01\] {
+  background-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* ── Borders ─────────────────────────────────────────────────────────────── */
+
+:root[data-theme="light"] .border-white\/10,
+:root[data-theme="light"] .hover\:border-white\/20:hover {
   border-color: var(--app-border) !important;
 }
 
-:root[data-theme="light"] [class*="divide-white/10"] {
-  border-color: var(--app-border) !important;
-}
-
-:root[data-theme="light"] [class*="border-white/5"] {
+:root[data-theme="light"] .border-white\/5 {
   border-color: rgba(15, 23, 42, 0.08) !important;
 }
 
-/* ── Base text colors ─────────────────────────────────────────────────────── */
+:root[data-theme="light"] .divide-white\/5 > * {
+  border-color: rgba(15, 23, 42, 0.09) !important;
+}
 
-:root[data-theme="light"] [class*="text-white"],
-:root[data-theme="light"] [class*="text-slate-100"],
-:root[data-theme="light"] [class*="text-slate-200"] {
+/* ── BASE TEXT: white/slate → dark ─────────────────────────────────────── */
+
+:root[data-theme="light"] .text-white {
   color: var(--app-fg) !important;
 }
 
-:root[data-theme="light"] [class*="text-slate-300"],
-:root[data-theme="light"] [class*="text-slate-400"] {
-  color: var(--app-muted) !important;
+:root[data-theme="light"] .text-slate-100,
+:root[data-theme="light"] .text-slate-200 {
+  color: #1e293b !important;
 }
 
-:root[data-theme="light"] [class*="text-slate-500"] {
-  color: var(--app-subtle) !important;
+:root[data-theme="light"] .text-slate-300 {
+  color: #334155 !important;
 }
 
-/* ── Brand cyan text ──────────────────────────────────────────────────────── */
+:root[data-theme="light"] .text-slate-400 {
+  color: #475569 !important;
+}
+
+:root[data-theme="light"] .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* ── ACCENT TEXT: pastel light tones → deep readable dark tones ─────────── */
+/* These classes appear on text that was designed for dark backgrounds.
+   In light mode we darken them so they read on the cream background.       */
 
 :root[data-theme="light"] .text-cyan-400 {
-  color: #0a6677 !important;
+  color: #0369a1 !important;
 }
 
 :root[data-theme="light"] .text-cyan-300,
 :root[data-theme="light"] .text-cyan-200,
-:root[data-theme="light"] .text-cyan-100,
-:root[data-theme="light"] .text-cyan-300\/90 {
+:root[data-theme="light"] .text-cyan-100 {
   color: var(--accent-cyan-text) !important;
 }
 
-/* ── Accent text colors ───────────────────────────────────────────────────── */
-
+:root[data-theme="light"] .text-emerald-400,
 :root[data-theme="light"] .text-emerald-300,
-:root[data-theme="light"] .text-emerald-200,
-:root[data-theme="light"] .text-emerald-400 {
+:root[data-theme="light"] .text-emerald-200 {
   color: var(--accent-emerald-text) !important;
 }
 
+:root[data-theme="light"] .text-amber-400,
 :root[data-theme="light"] .text-amber-300,
-:root[data-theme="light"] .text-amber-200,
-:root[data-theme="light"] .text-amber-400 {
+:root[data-theme="light"] .text-amber-200 {
   color: var(--accent-amber-text) !important;
 }
 
-:root[data-theme="light"] .text-rose-200,
+:root[data-theme="light"] .text-rose-400,
 :root[data-theme="light"] .text-rose-300,
-:root[data-theme="light"] .text-rose-400 {
+:root[data-theme="light"] .text-rose-200 {
   color: var(--accent-rose-text) !important;
 }
 
@@ -331,185 +338,48 @@
   color: var(--accent-indigo-text) !important;
 }
 
-/* ── Icon ink (brand mark + nav icons) ───────────────────────────────────── */
-
-:root[data-theme="light"] .brand-mark-icon,
-:root[data-theme="light"] .nav-item-icon {
-  color: var(--icon-ink) !important;
+:root[data-theme="light"] .text-yellow-400 {
+  color: #92400e !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   ICON VISIBILITY — Lucide icons inside icon-wrapper spans
-   All icon containers that use dark backgrounds need dark ink so icons show.
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ── ICON COLORS inside containers ─────────────────────────────────────── */
+/* Lucide icons inherit color from their parent. Since the container text
+   color is being overridden above, icons will automatically be dark too.
+   These extra rules handle direct className props on icon components.      */
 
-/* Nav icon containers (sidebar icon bubbles) */
-:root[data-theme="light"] .nav-icon-dashboard,
-:root[data-theme="light"] .nav-icon-monitoring,
-:root[data-theme="light"] .nav-icon-alerts,
-:root[data-theme="light"] .nav-icon-simulator,
-:root[data-theme="light"] .nav-icon-analytics {
-  /* Keep the dark saturated bg — they look great in light mode too */
-  filter: brightness(1.1) saturate(1.1);
+:root[data-theme="light"] .text-rose-400 svg,
+:root[data-theme="light"] .text-cyan-400 svg,
+:root[data-theme="light"] .text-emerald-400 svg,
+:root[data-theme="light"] .text-amber-400 svg {
+  color: inherit;
 }
 
-/* Sidebar nav item icon wrapper: bg-slate-900/80 → surface, keep icon dark */
-:root[data-theme="light"] .nav-item-icon.nav-icon-dashboard,
-:root[data-theme="light"] .nav-item-icon.nav-icon-monitoring,
-:root[data-theme="light"] .nav-item-icon.nav-icon-alerts,
-:root[data-theme="light"] .nav-item-icon.nav-icon-analytics {
-  color: #f0fdff !important;
+/* Search icon inside inputs */
+:root[data-theme="light"] .text-slate-400.absolute {
+  color: #64748b !important;
 }
 
-/* Generic icon containers inside cards/headers (span > svg pattern) */
-/* These are spans like: rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-cyan-300 */
-:root[data-theme="light"] span.inline-flex.text-cyan-300,
-:root[data-theme="light"] span.inline-flex.text-cyan-200 {
-  background-color: var(--accent-cyan-bg) !important;
-  border-color: var(--accent-cyan-border) !important;
-  color: var(--accent-cyan-text) !important;
-}
+/* ── ACCENT BACKGROUNDS — keep as light tints, do NOT darken ───────────── */
+/* These are already transparent tints. On the cream bg they show correctly.
+   We only need to strengthen borders so the containers are visible.        */
 
-:root[data-theme="light"] span.inline-flex.text-rose-300,
-:root[data-theme="light"] span.inline-flex.text-rose-200 {
-  background-color: var(--accent-rose-bg) !important;
-  border-color: var(--accent-rose-border) !important;
-  color: var(--accent-rose-text) !important;
-}
-
-:root[data-theme="light"] span.inline-flex.text-emerald-300,
-:root[data-theme="light"] span.inline-flex.text-emerald-200 {
-  background-color: var(--accent-emerald-bg) !important;
-  border-color: var(--accent-emerald-border) !important;
-  color: var(--accent-emerald-text) !important;
-}
-
-:root[data-theme="light"] span.inline-flex.text-amber-300,
-:root[data-theme="light"] span.inline-flex.text-amber-200 {
-  background-color: var(--accent-amber-bg) !important;
-  border-color: var(--accent-amber-border) !important;
-  color: var(--accent-amber-text) !important;
-}
-
-/* KPI icon badges: ring + bg combo (e.g. bg-cyan-400/10 ring-cyan-400/20) */
-:root[data-theme="light"] span.rounded-\[1\.1rem\].bg-cyan-400\/10,
-:root[data-theme="light"] [class*="rounded"][class*="bg-cyan-400/10"][class*="ring-cyan-400"] {
-  background-color: var(--accent-cyan-bg) !important;
-  color: var(--accent-cyan-text) !important;
-}
-
-:root[data-theme="light"] span.rounded-\[1\.1rem\].bg-amber-400\/10,
-:root[data-theme="light"] [class*="rounded"][class*="bg-amber-400/10"][class*="ring-amber-400"] {
-  background-color: var(--accent-amber-bg) !important;
-  color: var(--accent-amber-text) !important;
-}
-
-:root[data-theme="light"] span.rounded-\[1\.1rem\].bg-emerald-400\/10,
-:root[data-theme="light"] [class*="rounded"][class*="bg-emerald-400/10"][class*="ring-emerald-400"] {
-  background-color: var(--accent-emerald-bg) !important;
-  color: var(--accent-emerald-text) !important;
-}
-
-:root[data-theme="light"] span.rounded-\[1\.1rem\].bg-sky-400\/10,
-:root[data-theme="light"] [class*="rounded"][class*="bg-sky-400/10"][class*="ring-sky-400"] {
-  background-color: var(--accent-sky-bg) !important;
-  color: var(--accent-sky-text) !important;
-}
-
-/* KPI strip in Alerts page — generic icon badge span */
-:root[data-theme="light"] span.inline-flex.rounded-xl.border.p-2\.5 {
-  /* Force dark bg on small icon badge spans */
-  filter: saturate(1.4) brightness(1.05);
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   ACCENT BACKGROUND BLOCKS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .bg-cyan-400\/10,
-:root[data-theme="light"] .bg-cyan-400\/12,
-:root[data-theme="light"] .bg-cyan-400\/15 {
-  background-color: var(--accent-cyan-bg) !important;
-}
-
-:root[data-theme="light"] .bg-emerald-400\/10 {
-  background-color: var(--accent-emerald-bg) !important;
-}
-
-:root[data-theme="light"] .bg-amber-400\/10 {
-  background-color: var(--accent-amber-bg) !important;
-}
-
-:root[data-theme="light"] .bg-rose-400\/10 {
-  background-color: var(--accent-rose-bg) !important;
-}
-
-:root[data-theme="light"] .bg-sky-400\/10 {
-  background-color: var(--accent-sky-bg) !important;
-}
-
-:root[data-theme="light"] .bg-indigo-400\/10 {
-  background-color: var(--accent-indigo-bg) !important;
-}
-
-/* Alert-level status backgrounds (deeper opacity variants) */
-:root[data-theme="light"] .bg-rose-500\/10,
-:root[data-theme="light"] .bg-rose-500\/5 {
-  background-color: var(--accent-rose-bg) !important;
-}
-
-:root[data-theme="light"] .bg-emerald-500\/10,
-:root[data-theme="light"] .bg-emerald-500\/5 {
-  background-color: var(--accent-emerald-bg) !important;
-}
-
-:root[data-theme="light"] .bg-amber-500\/10,
-:root[data-theme="light"] .bg-amber-500\/5 {
-  background-color: var(--accent-amber-bg) !important;
-}
-
-:root[data-theme="light"] .bg-yellow-500\/10,
-:root[data-theme="light"] .bg-yellow-500\/5 {
-  background-color: #5e4a10 !important;
-}
-
-:root[data-theme="light"] .bg-indigo-400\/10 {
-  background-color: var(--accent-indigo-bg) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   ACCENT BORDERS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .border-cyan-400\/20,
-:root[data-theme="light"] .hover\:border-cyan-400\/20:hover,
-:root[data-theme="light"] .hover\:border-cyan-400\/30:hover,
-:root[data-theme="light"] .focus\:border-cyan-400\/40:focus {
+:root[data-theme="light"] .border-cyan-400\/20 {
   border-color: var(--accent-cyan-border) !important;
 }
 
-:root[data-theme="light"] .border-emerald-400\/20 {
-  border-color: var(--accent-emerald-border) !important;
-}
-
+:root[data-theme="light"] .border-emerald-400\/20,
 :root[data-theme="light"] .border-emerald-500\/20,
 :root[data-theme="light"] .border-emerald-500\/30 {
   border-color: var(--accent-emerald-border) !important;
 }
 
-:root[data-theme="light"] .border-amber-400\/20 {
-  border-color: var(--accent-amber-border) !important;
-}
-
+:root[data-theme="light"] .border-amber-400\/20,
 :root[data-theme="light"] .border-amber-500\/20,
 :root[data-theme="light"] .border-amber-500\/30 {
   border-color: var(--accent-amber-border) !important;
 }
 
-:root[data-theme="light"] .border-rose-400\/20 {
-  border-color: var(--accent-rose-border) !important;
-}
-
+:root[data-theme="light"] .border-rose-400\/20,
 :root[data-theme="light"] .border-rose-500\/20,
 :root[data-theme="light"] .border-rose-500\/30 {
   border-color: var(--accent-rose-border) !important;
@@ -519,775 +389,192 @@
   border-color: var(--accent-indigo-border) !important;
 }
 
-:root[data-theme="light"] .border-yellow-500\/20 {
-  border-color: #7a5f0f !important;
+:root[data-theme="light"] .border-yellow-500\/20,
+:root[data-theme="light"] .border-yellow-500\/30 {
+  border-color: rgba(217, 119, 6, 0.35) !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   BUTTON STYLES — Make buttons dark+visible in light mode
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* Primary cyan buttons */
-:root[data-theme="light"] button.bg-cyan-400\/10,
-:root[data-theme="light"] a.bg-cyan-400\/10,
-:root[data-theme="light"] button.bg-cyan-400\/12,
-:root[data-theme="light"] button.bg-cyan-400\/15 {
-  background-color: var(--accent-cyan-bg) !important;
-  border-color: var(--accent-cyan-border) !important;
-  color: var(--accent-cyan-text) !important;
+/* Dashed empty-state borders */
+:root[data-theme="light"] .border-dashed {
+  border-color: rgba(15, 23, 42, 0.20) !important;
 }
 
-:root[data-theme="light"] button.hover\:bg-cyan-400\/15:hover,
-:root[data-theme="light"] a.hover\:bg-cyan-400\/15:hover {
-  background-color: #14505d !important;
+/* ── SHADOWS ─────────────────────────────────────────────────────────────── */
+
+:root[data-theme="light"] .shadow-black\/20,
+:root[data-theme="light"] .shadow-2xl.shadow-black\/20,
+:root[data-theme="light"] .shadow-xl.shadow-black\/20 {
+  --tw-shadow-color: rgba(15, 23, 42, 0.10) !important;
 }
 
-/* Neutral ghost buttons (bg-white/[0.03..0.07]) */
-:root[data-theme="light"] button[class*="bg-white/[0.0"],
-:root[data-theme="light"] a[class*="bg-white/[0.0"] {
-  background-color: rgba(15, 23, 42, 0.07) !important;
-  border-color: rgba(15, 23, 42, 0.18) !important;
+/* ── FORM INPUTS ─────────────────────────────────────────────────────────── */
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
   color: var(--app-fg) !important;
 }
 
-:root[data-theme="light"] button[class*="bg-white/[0.0"]:hover,
-:root[data-theme="light"] a[class*="bg-white/[0.0"]:hover {
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* ── HOVER STATES ────────────────────────────────────────────────────────── */
+
+:root[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover,
+:root[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover,
+:root[data-theme="light"] .hover\:bg-white\/\[0\.07\]:hover,
+:root[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover,
+:root[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: rgba(15, 23, 42, 0.07) !important;
+}
+
+:root[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+:root[data-theme="light"] .hover\:text-white:hover,
+:root[data-theme="light"] .hover\:text-slate-100:hover,
+:root[data-theme="light"] .hover\:text-slate-200:hover {
+  color: #0f172a !important;
+}
+
+:root[data-theme="light"] .hover\:text-slate-300:hover {
+  color: #334155 !important;
+}
+
+/* ── THEME TOGGLE BUTTON ──────────────────────────────────────────────────── */
+/* The toggle button uses bg-slate-950/80 which is already overridden to cream.
+   We need to ensure the Moon/Sun icon is dark enough to see.               */
+
+:root[data-theme="light"] button.inline-flex.rounded-full.border.bg-slate-950\/80 {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+  color: #1e293b !important;
+}
+
+/* ── ADMIN PROFILE SIGN OUT BUTTON ───────────────────────────────────────── */
+
+:root[data-theme="light"] button.bg-slate-900\/90 {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+  border-color: var(--app-border) !important;
+  color: var(--app-fg) !important;
+}
+
+:root[data-theme="light"] .hover\:bg-slate-800:hover {
   background-color: rgba(15, 23, 42, 0.12) !important;
 }
 
-/* Neutral ghost buttons using Tailwind opacity classes */
-:root[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover,
-:root[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover,
-:root[data-theme="light"] .hover\:bg-white\/\[0\.055\]:hover,
-:root[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover {
-  background-color: rgba(15, 23, 42, 0.10) !important;
+/* ── TABLE ROWS ──────────────────────────────────────────────────────────── */
+
+:root[data-theme="light"] tbody tr:hover {
+  background-color: rgba(15, 23, 42, 0.03) !important;
 }
 
-:root[data-theme="light"] .hover\:bg-cyan-400\/15:hover {
-  background-color: #14505d !important;
+:root[data-theme="light"] td.text-cyan-400 {
+  color: #0369a1 !important;
 }
 
-/* Sign out / admin panel button: bg-slate-900/90 */
-:root[data-theme="light"] button.bg-slate-900\/90,
-:root[data-theme="light"] .bg-slate-900\/90 {
-  background-color: rgba(15, 23, 42, 0.08) !important;
-  color: var(--app-fg) !important;
-}
+/* ── RECHARTS TOOLTIPS ────────────────────────────────────────────────────── */
+/* Chart tooltips have hardcoded dark inline styles. Override via CSS class. */
 
-/* Sidebar About link neutral ghost button */
-:root[data-theme="light"] a[class*="bg-white/[0.035]"],
-:root[data-theme="light"] a[class*="hover:bg-white/[0.055]"]:hover {
-  background-color: rgba(15, 23, 42, 0.06) !important;
-  border-color: var(--app-border) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   STATUS BADGES — Chips & pills (alert status, severity, risk level)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* Alert row status badges (OPEN / RESOLVED) */
-:root[data-theme="light"] .border-rose-500\/30.bg-rose-500\/10,
-:root[data-theme="light"] .border-rose-500\/10.bg-rose-500\/10 {
-  background-color: var(--accent-rose-bg) !important;
-  border-color: var(--accent-rose-border) !important;
-}
-
-:root[data-theme="light"] .border-emerald-500\/30.bg-emerald-500\/10,
-:root[data-theme="light"] .border-emerald-500\/20.bg-emerald-500\/10 {
-  background-color: var(--accent-emerald-bg) !important;
-  border-color: var(--accent-emerald-border) !important;
-}
-
-:root[data-theme="light"] .border-amber-500\/30.bg-amber-500\/10 {
-  background-color: var(--accent-amber-bg) !important;
-  border-color: var(--accent-amber-border) !important;
-}
-
-/* Alert detail drawer header: status-tinted area */
-:root[data-theme="light"] .border-rose-500\/30.bg-rose-500\/10.border-b {
-  background-color: var(--accent-rose-bg) !important;
-}
-
-/* Batch Distribution / Timeline label pills */
-:root[data-theme="light"] span.rounded-full.border.bg-cyan-400\/10.text-cyan-300 {
-  background-color: var(--accent-cyan-bg) !important;
-  border-color: var(--accent-cyan-border) !important;
-  color: var(--accent-cyan-text) !important;
-}
-
-:root[data-theme="light"] span.rounded-full.border.bg-amber-400\/10.text-amber-300 {
-  background-color: var(--accent-amber-bg) !important;
-  border-color: var(--accent-amber-border) !important;
-  color: var(--accent-amber-text) !important;
-}
-
-/* Connection status indicator (Live Feed) */
-:root[data-theme="light"] .border-emerald-400\/20.bg-emerald-400\/10 {
-  background-color: var(--accent-emerald-bg) !important;
-  border-color: var(--accent-emerald-border) !important;
-}
-
-/* Anomaly event row risk borders (Live Feed event ticker) */
-:root[data-theme="light"] .border-rose-500\/30.bg-rose-500\/10,
-:root[data-theme="light"] .border-amber-500\/30.bg-amber-500\/10,
-:root[data-theme="light"] .border-yellow-500\/30.bg-yellow-500\/10 {
-  /* Keep dark bg but ensure text is readable */
-  color: inherit;
-}
-
-/* Filter chip buttons (inactive state) */
-:root[data-theme="light"] button.border-white\/10.bg-white\/\[0\.03\].text-slate-500 {
-  background-color: rgba(15, 23, 42, 0.06) !important;
-  border-color: rgba(15, 23, 42, 0.16) !important;
-  color: var(--app-subtle) !important;
-}
-
-/* Email policy verdict badges */
-:root[data-theme="light"] .border-rose-500\/20.bg-rose-500\/10 {
-  background-color: var(--accent-rose-bg) !important;
-  border-color: var(--accent-rose-border) !important;
-}
-
-:root[data-theme="light"] .border-emerald-500\/20.bg-emerald-500\/10 {
-  background-color: var(--accent-emerald-bg) !important;
-  border-color: var(--accent-emerald-border) !important;
-}
-
-:root[data-theme="light"] .border-amber-500\/20.bg-amber-500\/10 {
-  background-color: var(--accent-amber-bg) !important;
-  border-color: var(--accent-amber-border) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   RING COLORS (KPI badges)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .ring-cyan-400\/20 {
-  --tw-ring-color: rgba(14, 61, 71, 0.45) !important;
-}
-
-:root[data-theme="light"] .ring-emerald-400\/20 {
-  --tw-ring-color: rgba(26, 74, 56, 0.45) !important;
-}
-
-:root[data-theme="light"] .ring-amber-400\/20 {
-  --tw-ring-color: rgba(107, 74, 18, 0.45) !important;
-}
-
-:root[data-theme="light"] .ring-sky-400\/20 {
-  --tw-ring-color: rgba(20, 64, 92, 0.45) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   SHADOW TINTS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] [class*="shadow-black/20"],
-:root[data-theme="light"] [class*="shadow-black/25"],
-:root[data-theme="light"] [class*="shadow-black/30"] {
-  --tw-shadow-color: rgba(15, 23, 42, 0.08) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   FORM INPUTS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] input,
-:root[data-theme="light"] select,
-:root[data-theme="light"] textarea {
-  color: var(--app-fg) !important;
-}
-
-:root[data-theme="light"] input::placeholder,
-:root[data-theme="light"] textarea::placeholder {
-  color: var(--app-subtle);
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   THEME TOGGLE BUTTON
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] button.inline-flex.h-11.w-11.rounded-full.border.bg-slate-950\/80 {
-  background-color: #1a3345 !important;
-  border-color: #2a4e6a !important;
-  color: #e8f4ff !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   ADMIN PROFILE MENU DROPDOWN
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .absolute.right-0[class*="bg-slate-950"] {
-  background-color: #1a2d3f !important;
-  border-color: #2e4a60 !important;
-  color: #e0eaf4 !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   ALERT DETAIL DRAWER (fixed panel)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .fixed.inset-y-0.right-0[class*="bg-slate-950"] {
-  background-color: #1a2d3f !important;
-  border-color: #2e4a60 !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   EMAIL AUDIT DETAIL MODAL (full fixed overlay)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .fixed.inset-0.z-50 > div[class*="bg-slate-950"] {
-  background-color: #18293b !important;
-  border-color: #2c4458 !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   SIDEBAR ACTIVE NAV ITEMS IN LIGHT MODE
-   Keep the dark saturated accent tones; they look great on light backgrounds.
-   Just override the inactive hover states.
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .hover\:text-slate-100:hover,
-:root[data-theme="light"] .hover\:text-slate-200:hover,
-:root[data-theme="light"] .group:hover .group-hover\/sidebar\:text-slate-300 {
-  color: var(--app-fg) !important;
-}
-
-:root[data-theme="light"] .bg-app.text-slate-100,
-:root[data-theme="light"] .text-slate-100 {
-  color: var(--app-fg);
-}
-
-/* Sidebar hover state for inactive nav items */
-:root[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover {
-  background-color: rgba(15, 23, 42, 0.08) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   RECHARTS TOOLTIPS  (inline style overrides via CSS vars)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* Chart tooltips use inline styles (backgroundColor: "#020617") — we target
-   the .recharts-tooltip-wrapper > .recharts-default-tooltip element */
 :root[data-theme="light"] .recharts-default-tooltip {
-  background-color: #1a2d3f !important;
-  border-color: #2e4a60 !important;
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
   border-radius: 14px !important;
-  color: #e0eaf4 !important;
+  color: #f1f5f9 !important;
 }
 
 :root[data-theme="light"] .recharts-tooltip-label {
-  color: #c8daea !important;
+  color: #cbd5e1 !important;
 }
 
 :root[data-theme="light"] .recharts-tooltip-item {
-  color: #e0eaf4 !important;
+  color: #f1f5f9 !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   DASHED EMPTY-STATE BORDERS
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ── ALERT DETAIL DRAWER (fixed right panel) ─────────────────────────────── */
+/* Keep this using cream surface, not dark navy */
 
-:root[data-theme="light"] .border-dashed[class*="border-white/10"] {
-  border-color: rgba(15, 23, 42, 0.18) !important;
+:root[data-theme="light"] .fixed.inset-y-0.right-0.bg-slate-950\/95 {
+  background-color: var(--app-surface-strong) !important;
+  border-color: var(--app-border) !important;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   TABLE ROWS
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ── EMAIL AUDIT DETAIL MODAL ────────────────────────────────────────────── */
+/* Keep cream surface, not dark navy */
 
-:root[data-theme="light"] tbody tr:hover {
+:root[data-theme="light"] .fixed.inset-0.z-50 .bg-slate-950 {
+  background-color: var(--app-surface-strong) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* ── ADMIN PROFILE MENU DROPDOWN ─────────────────────────────────────────── */
+
+:root[data-theme="light"] .absolute.right-0.z-10 {
+  background-color: var(--app-surface-strong) !important;
+  border-color: var(--app-border) !important;
+}
+
+/* ── POLICY SEARCH HIGHLIGHT MARKS ───────────────────────────────────────── */
+
+:root[data-theme="light"] mark.bg-cyan-500\/30 {
+  background-color: rgba(14, 165, 233, 0.18) !important;
+  color: #0c4a6e !important;
+}
+
+/* ── SIDEBAR PIPELINE STEPPER (bg-cyan-950 / bg-rose-950) ───────────────── */
+/* The stepper uses fully opaque dark class names — map these to accent surfaces */
+
+:root[data-theme="light"] .bg-cyan-950 {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+}
+
+:root[data-theme="light"] .bg-rose-950 {
+  background-color: rgba(244, 63, 94, 0.10) !important;
+}
+
+:root[data-theme="light"] .bg-rose-950\/50,
+:root[data-theme="light"] .bg-rose-950\/40 {
+  background-color: rgba(244, 63, 94, 0.10) !important;
+}
+
+/* ── MISC small fixes ────────────────────────────────────────────────────── */
+
+/* bg-slate-500/10 (connection status idle) */
+:root[data-theme="light"] .bg-slate-500\/10 {
+  background-color: rgba(100, 116, 139, 0.10) !important;
+}
+
+:root[data-theme="light"] .border-slate-500\/20 {
+  border-color: rgba(100, 116, 139, 0.25) !important;
+}
+
+:root[data-theme="light"] .text-slate-600 {
+  color: #475569 !important;
+}
+
+/* bg-white/10 progress bars */
+:root[data-theme="light"] .bg-white\/10 {
+  background-color: rgba(15, 23, 42, 0.10) !important;
+}
+
+/* ANOMALY source badge in Live Feed */
+:root[data-theme="light"] .bg-rose-500\/20 {
+  background-color: rgba(244, 63, 94, 0.12) !important;
+}
+
+/* bg-slate-900/20, bg-slate-900/30 (drag zone) */
+:root[data-theme="light"] .bg-slate-900\/20 {
   background-color: rgba(15, 23, 42, 0.04) !important;
 }
 
-:root[data-theme="light"] .divide-y.divide-white\/5 > * {
-  border-color: rgba(15, 23, 42, 0.08) !important;
+:root[data-theme="light"] .bg-slate-900\/30 {
+  background-color: rgba(15, 23, 42, 0.06) !important;
 }
 
-/* Email table: recipient column (text-cyan-400) */
-:root[data-theme="light"] td.text-cyan-400 {
-  color: #0e6b7a !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   USER DETAIL PAGE — identity info card icon wrappers
-   span rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-cyan-300
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] span[class*="text-cyan-300"][class*="bg-white"] {
-  background-color: var(--accent-cyan-bg) !important;
-  border-color: var(--accent-cyan-border) !important;
-  color: var(--accent-cyan-text) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   PIPELINE STEPPER (Upload page)
-   ───────────────────────────────────────────────────────────────────────────── */
-
-:root[data-theme="light"] .border-cyan-400.bg-cyan-950 {
-  background-color: var(--accent-cyan-bg) !important;
-  border-color: var(--accent-cyan-border) !important;
-  color: var(--accent-cyan-text) !important;
-}
-
-:root[data-theme="light"] .border-rose-400.bg-rose-950 {
-  background-color: var(--accent-rose-bg) !important;
-  border-color: var(--accent-rose-border) !important;
-  color: var(--accent-rose-text) !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MISC RESETS
-   ───────────────────────────────────────────────────────────────────────────── */
-
-/* Prevent transparent low-opacity bg from making text disappear */
-:root[data-theme="light"] .bg-cyan-400\/10.text-white,
-:root[data-theme="light"] .bg-cyan-400\/12.text-white,
-:root[data-theme="light"] .bg-cyan-400\/15.text-white,
-:root[data-theme="light"] .bg-cyan-400\/10.text-slate-100,
-:root[data-theme="light"] .bg-cyan-400\/12.text-slate-100,
-:root[data-theme="light"] .bg-cyan-400\/15.text-slate-100 {
-  color: var(--accent-cyan-text) !important;
-}
-
-/* Email Security policy highlight marks */
-:root[data-theme="light"] mark.bg-cyan-500\/30 {
-  background-color: rgba(14, 61, 71, 0.4) !important;
-  color: var(--accent-cyan-text) !important;
-}
-
-/* Policy section pills */
-:root[data-theme="light"] span.rounded-lg[class*="bg-white/[0.05]"],
-:root[data-theme="light"] span[class*="bg-white/[0.04]"][class*="border-white/5"] {
-  background-color: rgba(15, 23, 42, 0.08) !important;
-  border-color: rgba(15, 23, 42, 0.14) !important;
-  color: var(--app-muted) !important;
-}
-
-/* Email exfil risk badge: bg-rose-950/50 */
-:root[data-theme="light"] span.bg-rose-950\/50,
-:root[data-theme="light"] span.bg-rose-950\/40 {
-  background-color: var(--accent-rose-bg) !important;
-  border-color: var(--accent-rose-border) !important;
-  color: var(--accent-rose-text) !important;
-}
-
-/* User icon badge in email audit table: bg-slate-900 border-white/10 */
-:root[data-theme="light"] span.rounded-xl.bg-slate-900 {
-  background-color: rgba(15, 23, 42, 0.1) !important;
-  border-color: rgba(15, 23, 42, 0.2) !important;
-  color: var(--app-muted) !important;
-}
-
-/* Policy filter tab active: bg-cyan-500/10 border-cyan-400/20 */
-:root[data-theme="light"] button.bg-cyan-500\/10.text-cyan-300.border.border-cyan-400\/20 {
-  background-color: var(--accent-cyan-bg) !important;
-  border-color: var(--accent-cyan-border) !important;
-  color: var(--accent-cyan-text) !important;
-}
-
-
-@layer base {
-  :root {
-    color-scheme: dark;
-    --app-bg: #050b16;
-    --app-fg: #f8fafc;
-    --app-surface: rgba(2, 6, 23, 0.72);
-    --app-surface-strong: rgba(2, 6, 23, 0.88);
-    --app-surface-soft: rgba(255, 255, 255, 0.04);
-    --app-border: rgba(255, 255, 255, 0.1);
-    --app-muted: #94a3b8;
-    --app-muted-strong: #cbd5e1;
-    --app-subtle: #64748b;
-    --app-overlay: rgba(2, 6, 23, 0.86);
-    --brand-bg: #123f4a;
-    --brand-border: #1b6778;
-    --brand-fg: #eefbfd;
-    --profile-bg: #1d3548;
-    --profile-border: #35546b;
-    --profile-fg: #f4f8fc;
-  }
-
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --app-bg: #f7f4ec;
-    --app-fg: #111111;
-    --app-surface: rgba(247, 244, 236, 0.94);
-    --app-surface-strong: rgba(247, 244, 236, 0.98);
-    --app-surface-soft: rgba(255, 255, 255, 0.66);
-    --app-border: rgba(15, 23, 42, 0.12);
-    --app-muted: #2f2f2f;
-    --app-muted-strong: #111111;
-    --app-subtle: #5b5b5b;
-    --app-overlay: rgba(247, 244, 236, 0.82);
-    --accent-cyan-bg: #0f3d47;
-    --accent-cyan-border: #16606f;
-    --accent-cyan-text: #f4fbfc;
-    --accent-emerald-bg: #1d4f3b;
-    --accent-emerald-border: #2b7557;
-    --accent-emerald-text: #f3fbf6;
-    --accent-amber-bg: #6b4a12;
-    --accent-amber-border: #8a611a;
-    --accent-amber-text: #fff8ea;
-    --accent-rose-bg: #6b2432;
-    --accent-rose-border: #8b3344;
-    --accent-rose-text: #fff4f6;
-    --accent-sky-bg: #15415d;
-    --accent-sky-border: #216389;
-    --accent-sky-text: #f2f9ff;
-    --brand-bg: #f7f4ec;
-    --brand-border: rgba(22, 59, 99, 0.14);
-    --brand-fg: #163b63;
-    --icon-ink: #163b63;
-    --profile-bg: #233d52;
-    --profile-border: #345671;
-    --profile-fg: #f7fafc;
-  }
-
-  html {
-    background: var(--app-bg);
-  }
-
-  body {
-    min-height: 100vh;
-    background-color: var(--app-bg);
-    color: var(--app-fg);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    margin: 0;
-    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-      sans-serif;
-    background-image:
-      radial-gradient(circle at top, rgba(14, 165, 233, 0.12), transparent 28%),
-      radial-gradient(circle at bottom right, rgba(15, 23, 42, 0.58), transparent 26%),
-      linear-gradient(180deg, #020617 0%, #050b16 100%);
-  }
-
-  body[data-theme="light"] {
-    background-image: none;
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-
-  #root {
-    min-height: 100vh;
-  }
-
-  a {
-    color: inherit;
-    text-decoration: none;
-  }
-}
-
-@layer utilities {
-  .bg-app {
-    background-color: var(--app-bg);
-    background-image:
-      radial-gradient(circle at top, rgba(14, 165, 233, 0.12), transparent 28%),
-      radial-gradient(circle at bottom right, rgba(15, 23, 42, 0.58), transparent 26%),
-      linear-gradient(180deg, #020617 0%, #050b16 100%);
-  }
-
-  :root[data-theme="light"] .bg-app {
-    background-image: none;
-  }
-}
-
-.brand-mark {
-  background-color: var(--brand-bg);
-  border-color: var(--brand-border);
-  color: var(--brand-fg);
-}
-
-.brand-mark-icon {
-  color: var(--brand-fg);
-}
-
-.profile-trigger {
-  background-color: var(--profile-bg);
-  border-color: var(--profile-border);
-  color: var(--profile-fg);
-}
-
-.profile-trigger:hover {
-  filter: brightness(1.08);
-}
-
-.profile-badge {
-  background-color: var(--profile-bg);
-  border-color: var(--profile-border);
-  color: var(--profile-fg);
-}
-
-.nav-item {
-  --nav-accent-bg: rgba(34, 211, 238, 0.12);
-  --nav-accent-border: rgba(34, 211, 238, 0.26);
-  --nav-accent-fg: #d7fbff;
-}
-
-.nav-dashboard {
-  --nav-accent-bg: #154b58;
-  --nav-accent-border: #1f7184;
-  --nav-accent-fg: #eefbfd;
-}
-
-.nav-monitoring {
-  --nav-accent-bg: #23425f;
-  --nav-accent-border: #345f88;
-  --nav-accent-fg: #f1f7ff;
-}
-
-.nav-alerts {
-  --nav-accent-bg: #5c3218;
-  --nav-accent-border: #8b4a24;
-  --nav-accent-fg: #fff6ed;
-}
-
-.nav-simulator {
-  --nav-accent-bg: #3d295d;
-  --nav-accent-border: #5a3b8b;
-  --nav-accent-fg: #f7f1ff;
-}
-
-.nav-analytics {
-  --nav-accent-bg: #1f4f3c;
-  --nav-accent-border: #2d7557;
-  --nav-accent-fg: #f2fbf6;
-}
-
-.nav-item-icon {
-  color: var(--nav-accent-fg);
-}
-
-.nav-icon-dashboard {
-  background-color: #103f4a;
-  border-color: #1b6778;
-  color: #eefbfd;
-}
-
-.nav-icon-monitoring {
-  background-color: #243f5c;
-  border-color: #345d86;
-  color: #f1f7ff;
-}
-
-.nav-icon-alerts {
-  background-color: #5e341b;
-  border-color: #8b4d28;
-  color: #fff6ed;
-}
-
-.nav-icon-simulator {
-  background-color: #402a60;
-  border-color: #5d3e8d;
-  color: #f7f1ff;
-}
-
-.nav-icon-analytics {
-  background-color: #214f3d;
-  border-color: #2d7557;
-  color: #f2fbf6;
-}
-
-.nav-item-active {
-  background-color: var(--nav-accent-bg);
-  box-shadow: inset 0 0 0 1px var(--nav-accent-border);
-  color: var(--nav-accent-fg);
-}
-
-:root[data-theme="light"] [class*="bg-slate-950"],
-:root[data-theme="light"] [class*="bg-slate-900"] {
-  background-color: var(--app-surface) !important;
-}
-
-:root[data-theme="light"] [class*="bg-white/[0.0"],
-:root[data-theme="light"] [class*="bg-white/["] {
-  background-color: var(--app-surface-soft) !important;
-}
-
-:root[data-theme="light"] [class*="border-white/10"] {
-  border-color: var(--app-border) !important;
-}
-
-:root[data-theme="light"] [class*="divide-white/10"] {
-  border-color: var(--app-border) !important;
-}
-
-:root[data-theme="light"] [class*="text-white"],
-:root[data-theme="light"] [class*="text-slate-100"],
-:root[data-theme="light"] [class*="text-slate-200"] {
-  color: var(--app-fg) !important;
-}
-
-:root[data-theme="light"] [class*="text-slate-300"],
-:root[data-theme="light"] [class*="text-slate-400"] {
-  color: var(--app-muted) !important;
-}
-
-:root[data-theme="light"] [class*="text-slate-500"] {
-  color: var(--app-subtle) !important;
-}
-
-:root[data-theme="light"] .text-cyan-400 {
-  color: #0b7285 !important;
-}
-
-:root[data-theme="light"] .brand-mark-icon,
-:root[data-theme="light"] .nav-item-icon {
-  color: var(--icon-ink) !important;
-}
-
-:root[data-theme="light"] .text-cyan-300,
-:root[data-theme="light"] .text-cyan-200,
-:root[data-theme="light"] .text-cyan-100,
-:root[data-theme="light"] .text-cyan-300\/90 {
-  color: var(--accent-cyan-text) !important;
-}
-
-:root[data-theme="light"] .text-emerald-300,
-:root[data-theme="light"] .text-emerald-200 {
-  color: var(--accent-emerald-text) !important;
-}
-
-:root[data-theme="light"] .text-amber-300,
-:root[data-theme="light"] .text-amber-200 {
-  color: var(--accent-amber-text) !important;
-}
-
-:root[data-theme="light"] .text-sky-300 {
-  color: var(--accent-sky-text) !important;
-}
-
-:root[data-theme="light"] .text-rose-200 {
-  color: var(--accent-rose-text) !important;
-}
-
-:root[data-theme="light"] [class*="shadow-black/20"],
-:root[data-theme="light"] [class*="shadow-black/25"],
-:root[data-theme="light"] [class*="shadow-black/30"] {
-  --tw-shadow-color: rgba(15, 23, 42, 0.08) !important;
-}
-
-:root[data-theme="light"] .bg-slate-950\/40,
-:root[data-theme="light"] .bg-slate-950\/60,
-:root[data-theme="light"] .bg-slate-950\/70,
-:root[data-theme="light"] .bg-slate-950\/72,
-:root[data-theme="light"] .bg-slate-950\/80,
-:root[data-theme="light"] .bg-slate-950\/85,
-:root[data-theme="light"] .bg-slate-950\/95 {
-  background-color: var(--app-surface) !important;
-}
-
-:root[data-theme="light"] .bg-slate-950\/88 {
-  background-color: var(--app-overlay) !important;
-}
-
-:root[data-theme="light"] .bg-slate-950\/86 {
-  background-color: rgba(247, 244, 236, 0.78) !important;
-}
-
-:root[data-theme="light"] .bg-slate-900\/80,
-:root[data-theme="light"] .bg-slate-900\/90 {
-  background-color: var(--app-surface-strong) !important;
-}
-
-:root[data-theme="light"] .bg-cyan-400\/10,
-:root[data-theme="light"] .bg-cyan-400\/12,
-:root[data-theme="light"] .bg-cyan-400\/15 {
-  background-color: var(--accent-cyan-bg) !important;
-}
-
-:root[data-theme="light"] .border-cyan-400\/20,
-:root[data-theme="light"] .hover\:border-cyan-400\/20:hover,
-:root[data-theme="light"] .hover\:border-cyan-400\/30:hover,
-:root[data-theme="light"] .focus\:border-cyan-400\/40:focus {
-  border-color: var(--accent-cyan-border) !important;
-}
-
-:root[data-theme="light"] .bg-emerald-400\/10 {
-  background-color: var(--accent-emerald-bg) !important;
-}
-
-:root[data-theme="light"] .border-emerald-400\/20 {
-  border-color: var(--accent-emerald-border) !important;
-}
-
-:root[data-theme="light"] .bg-amber-400\/10 {
-  background-color: var(--accent-amber-bg) !important;
-}
-
-:root[data-theme="light"] .border-amber-400\/20 {
-  border-color: var(--accent-amber-border) !important;
-}
-
-:root[data-theme="light"] .bg-rose-400\/10 {
-  background-color: var(--accent-rose-bg) !important;
-}
-
-:root[data-theme="light"] .border-rose-400\/20 {
-  border-color: var(--accent-rose-border) !important;
-}
-
-:root[data-theme="light"] .bg-sky-400\/10 {
-  background-color: var(--accent-sky-bg) !important;
-}
-
-:root[data-theme="light"] .ring-cyan-400\/20 {
-  --tw-ring-color: rgba(15, 61, 71, 0.35) !important;
-}
-
-:root[data-theme="light"] .ring-emerald-400\/20 {
-  --tw-ring-color: rgba(29, 79, 59, 0.35) !important;
-}
-
-:root[data-theme="light"] .ring-amber-400\/20 {
-  --tw-ring-color: rgba(107, 74, 18, 0.35) !important;
-}
-
-:root[data-theme="light"] .ring-sky-400\/20 {
-  --tw-ring-color: rgba(21, 65, 93, 0.35) !important;
-}
-
-:root[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover,
-:root[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover,
-:root[data-theme="light"] .hover\:bg-white\/\[0\.055\]:hover,
-:root[data-theme="light"] .hover\:bg-white\/\[0\.08\]:hover {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-}
-
-:root[data-theme="light"] .hover\:bg-cyan-400\/15:hover {
-  background-color: #14505d !important;
-}
-
-:root[data-theme="light"] .bg-cyan-400\/10.text-white,
-:root[data-theme="light"] .bg-cyan-400\/12.text-white,
-:root[data-theme="light"] .bg-cyan-400\/15.text-white,
-:root[data-theme="light"] .bg-cyan-400\/10.text-slate-100,
-:root[data-theme="light"] .bg-cyan-400\/12.text-slate-100,
-:root[data-theme="light"] .bg-cyan-400\/15.text-slate-100 {
-  color: var(--accent-cyan-text) !important;
-}
-
-:root[data-theme="light"] .hover\:text-slate-100:hover,
-:root[data-theme="light"] .hover\:text-slate-200:hover,
-:root[data-theme="light"] .group:hover .group-hover\/sidebar\:text-slate-300 {
-  color: var(--app-fg) !important;
-}
-
-:root[data-theme="light"] .bg-app.text-slate-100,
-:root[data-theme="light"] .text-slate-100 {
-  color: var(--app-fg);
-}
-
-:root[data-theme="light"] input,
-:root[data-theme="light"] select,
-:root[data-theme="light"] textarea {
-  color: var(--app-fg) !important;
-}
-
-:root[data-theme="light"] input::placeholder,
-:root[data-theme="light"] textarea::placeholder {
-  color: var(--app-subtle);
+/* Tablet table bg-slate-950/40 inner */
+:root[data-theme="light"] .bg-slate-950\/40 {
+  background-color: rgba(247, 244, 236, 0.8) !important;
 }

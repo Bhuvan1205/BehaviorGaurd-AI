@@ -400,18 +400,21 @@ export function DashboardPage() {
             departmentRollup.map((department) => (
               <div
                 key={department.department_name}
-                className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex flex-col gap-2"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{department.department_name}</p>
-                    <p className="mt-1 text-sm text-slate-400">{department.user_count} users monitored</p>
-                  </div>
-                  <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">
-                    {department.open_alert_count} open
+                {/* Name row + badge */}
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-white leading-snug min-w-0 flex-1 break-words">{department.department_name}</p>
+                  <span className="shrink-0 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-cyan-300 whitespace-nowrap">
+                    {department.open_alert_count} Open
                   </span>
                 </div>
-                <p className="mt-4 text-sm text-slate-500">Average risk {formatRisk(department.avg_risk)}</p>
+                {/* Users count */}
+                <p className="text-xs text-slate-400">{department.user_count} users monitored</p>
+                {/* Avg risk — pinned to bottom with top border */}
+                <p className="text-xs text-slate-500 mt-auto pt-2 border-t border-white/5">
+                  Average risk <span className="font-semibold text-slate-300">{formatRisk(department.avg_risk)}</span>
+                </p>
               </div>
             ))
           ) : (
