@@ -214,6 +214,30 @@
   color: var(--nav-accent-fg);
 }
 
+/* ── Light mode: nav icon containers — warm light grey bg + dark brown icon ── */
+
+:root[data-theme="light"] .nav-icon-dashboard,
+:root[data-theme="light"] .nav-icon-monitoring,
+:root[data-theme="light"] .nav-icon-alerts,
+:root[data-theme="light"] .nav-icon-simulator,
+:root[data-theme="light"] .nav-icon-analytics {
+  background-color: rgba(241, 237, 228, 0.9) !important;
+  border-color: rgba(45, 26, 14, 0.18) !important;
+  color: #2d1a0e !important;
+}
+
+/* Also override the bg-slate-900/80 on the span itself */
+:root[data-theme="light"] .nav-item-icon.bg-slate-900\/80 {
+  background-color: rgba(241, 237, 228, 0.9) !important;
+  color: #2d1a0e !important;
+}
+
+/* Brand mark (logo shield icon) — same dark brown */
+:root[data-theme="light"] .brand-mark-icon {
+  color: #2d1a0e !important;
+}
+
+
 /* ═══════════════════════════════════════════════════════════════════════════
    LIGHT MODE OVERRIDES
    Philosophy: Keep ALL backgrounds at their original light/transparent tints.
