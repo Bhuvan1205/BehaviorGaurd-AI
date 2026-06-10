@@ -23,7 +23,7 @@ export function setStoredSession(session) {
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -52,7 +52,9 @@ export async function loginAdmin(payload) {
 }
 
 export async function registerAdmin(payload) {
-  const response = await apiClient.post("/auth/register", payload);
+  const response = await apiClient.post("/auth/register", payload, {
+    timeout: 30000,
+  });
   return unwrapResponse(response);
 }
 

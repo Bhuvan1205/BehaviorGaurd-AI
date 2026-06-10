@@ -191,8 +191,6 @@ def login(data: LoginRequest):
         if "conn" in locals():
             conn.rollback()
         raise
-    except HTTPException:
-        raise
     except Exception as exc:
         if "conn" in locals():
             conn.rollback()
@@ -208,7 +206,6 @@ def login(data: LoginRequest):
 def register(data: RegisterRequest):
     try:
         conn, cur = get_cursor()
-        ensure_admin_tables(cur)
         cur.execute(
             """
             INSERT INTO security.admin_users (admin_id, employee_id, full_name, username, password_hash)
@@ -258,8 +255,6 @@ def logout(authorization: Optional[str] = Header(default=None)):
     except HTTPException:
         if "conn" in locals():
             conn.rollback()
-        raise
-    except HTTPException:
         raise
     except Exception as exc:
         if "conn" in locals():
