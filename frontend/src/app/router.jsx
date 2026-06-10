@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./AppLayout";
 import { AboutPage } from "../pages/AboutPage";
 import { AlertsPage } from "../pages/AlertsPage";
@@ -11,7 +11,7 @@ import { ProtectedRoute } from "../components/ProtectedRoute";
 
 export function AppRouter() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/signin" element={<SignInPage />} />
         <Route element={<ProtectedRoute />}>
@@ -27,6 +27,6 @@ export function AppRouter() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
